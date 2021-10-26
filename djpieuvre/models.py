@@ -1,0 +1,52 @@
+from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.models import ContentType
+from django.db import models
+from pieuvre import WorkflowEnabled
+
+from djpieuvre.constants import TASK_STATES
+
+
+class PieuvreProcess(WorkflowEnabled, models.Model):
+    STATE_FIELD_NAME = "state"
+
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    object_id = models.PositiveIntegerField()
+    process_target = GenericForeignKey("content_type", "object_id")
+    workflow_name = models.TextField()
+    workflow_version = models.PositiveIntegerField(default=1)
+    created_at = models.DateTimeField(auto_now_add=True)
+    edited_at = models.DateTimeField(auto_now=True)
+    state = models.TextField()
+
+    data = models.JSONField(null=True, blank=True)
+
+    def get_workflow_class(self):
+        from djpieuvre.core import get
+
+        workflow = get(self.workflow_name)
+        if not workflow:
+            raise ValueError(f"Workflow {self.workflow_name} is not registered")
+        return workflow
+
+
+class PieuvreTask(models.Model):
+    process = models.ForeignKey(PieuvreProcess, on_delete=models.CASCADE)
+    state = models.CharField(
+        choices=TASK_STATES, default=TASK_STATES.CREATED, max_length=128
+    )
+    name = models.TextField()
+    task = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    edited_at = models.DateTimeField(auto_now=True)
+
+    data = models.JSONField(null=True, blank=True)
+
+    def assign(self, transition):
+        """
+        Takes a pieuvre transition and tries to assign it to some users
+        """
+        ...
+
+    def complete(self):
+        self.state = TASK_STATES.DONE
+        self.process.workflow.run_transition(self.task)
