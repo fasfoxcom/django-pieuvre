@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "djpieuvre",
     "demo",
+    "django_extensions",
 ]
 
 MIDDLEWARE = [

@@ -7,7 +7,6 @@ from djpieuvre import views
 router = DefaultRouter()
 router.register(r"tasks", views.TaskViewSet)
 
-# The API URLs are now determined automatically by the router.
 urlpatterns = [
     path("", include(router.urls)),
 ]

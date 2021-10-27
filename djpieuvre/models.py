@@ -1,9 +1,10 @@
+from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.db import models
-from pieuvre import WorkflowEnabled
 
 from djpieuvre.constants import TASK_STATES
+from djpieuvre.mixins import WorkflowEnabled
 
 
 class PieuvreProcess(WorkflowEnabled, models.Model):
@@ -23,7 +24,7 @@ class PieuvreProcess(WorkflowEnabled, models.Model):
     def get_workflow_class(self):
         from djpieuvre.core import get
 
-        workflow = get(self.workflow_name)
+        workflow = get(self.workflow_name, self.workflow_version)
         if not workflow:
             raise ValueError(f"Workflow {self.workflow_name} is not registered")
         return workflow
@@ -38,14 +39,20 @@ class PieuvreTask(models.Model):
     task = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
     edited_at = models.DateTimeField(auto_now=True)
+    users = models.ManyToManyField(settings.AUTH_USER_MODEL)
+    groups = models.ManyToManyField("auth.Group")
 
     data = models.JSONField(null=True, blank=True)
 
-    def assign(self, transition):
+    def assign(self, transition, users, groups):
         """
-        Takes a pieuvre transition and tries to assign it to some users
+        Takes a pieuvre transition and tries to assign it to some users.
+        Override to implement custom behavior.
         """
-        ...
+        if users:
+            self.users.set(users)
+        if groups:
+            self.groups.set(groups)
 
     def complete(self):
         self.state = TASK_STATES.DONE
