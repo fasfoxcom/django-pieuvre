@@ -9,3 +9,5 @@ TASK_STATES = Choices(
 
 ON_TASK_ASSIGN_USER_HOOK = "_on_task_assign_user_hook"
 ON_TASK_ASSIGN_GROUP_HOOK = "_on_task_assign_group_hook"
+
+WORKFLOW_PERM_PREFIX = "access"

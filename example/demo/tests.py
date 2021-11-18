@@ -1,3 +1,5 @@
+import time
+
 import factory
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import User, Group
@@ -7,7 +9,7 @@ from rest_framework.test import APITestCase
 
 from djpieuvre.models import PieuvreTask
 from .models import MyProcess
-from .workflows import MyFirstWorkflow1, MyFirstWorkflow2
+from .workflows import MyFirstWorkflow1, MyFirstWorkflow2, MyFirstWorkflow3
 
 
 class UserFactory(factory.django.DjangoModelFactory):
@@ -147,7 +149,7 @@ class AuthenticatedTasksTests(TasksTests):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.json()), 1)
 
-    def test_user_can_get_workflows(self):
+    def test_user_can_only_get_authorized_workflows(self):
         process = MyProcess.objects.create()
         wf = self._advance_and_reload_workflow(
             MyFirstWorkflow1, process, initial_state="submitted"
@@ -159,4 +161,57 @@ class AuthenticatedTasksTests(TasksTests):
         js = response.json()
         self.assertEqual(len(js["workflows"]), 2)
         self.assertEqual(js["workflows"][0]["state"], "submitted")
-        self.assertEqual(js["workflows"][0]["transitions"][0]["name"], "finish")
+        for wrkf in js["workflows"]:
+            self.assertNotEqual(wrkf["name"], MyFirstWorkflow2.name)
+
+    def test_unauthorized_user_cannot_get_manual_transition(self):
+        process = MyProcess.objects.create()
+        wf = self._advance_and_reload_workflow(
+            MyFirstWorkflow3, process, initial_state="progressing"
+        )
+        response = self.client.get(
+            reverse("myprocess-workflows", kwargs={"pk": process.pk})
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        js = response.json()
+        self.assertEqual(len(js["workflows"]), 2)
+
+        self.assertEqual(js["workflows"][0]["state"], "created")
+        self.assertEqual(len(js["workflows"][0]["transitions"]), 1)
+
+        self.assertEqual(js["workflows"][1]["state"], "progressing")
+        self.assertEqual(len(js["workflows"][1]["transitions"]), 0)
+
+        # Make the user a completer
+        GroupFactory(name="Completers Team")
+        self.user.groups.add(Group.objects.get(name="Completers Team"))
+
+        response = self.client.get(
+            reverse("myprocess-workflows", kwargs={"pk": process.pk})
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        js = response.json()
+
+        self.assertEqual(js["workflows"][0]["state"], "created")
+        self.assertEqual(len(js["workflows"][0]["transitions"]), 1)
+
+        # user can get complete transition since he is a completer
+        self.assertEqual(js["workflows"][1]["state"], "progressing")
+        self.assertEqual(len(js["workflows"][1]["transitions"]), 1)
+
+    def test_caching(self):
+        process = MyProcess.objects.create()
+        wf = self._advance_and_reload_workflow(
+            MyFirstWorkflow3, process
+        )
+        GroupFactory(name="Completers Team")
+        wf.groups_who_can_complete.cache_clear()
+        with self.assertNumQueries(1):
+            len(wf.groups_who_can_complete(tuple(wf.transitions[1].items())))
+
+        self.assertEqual(wf.groups_who_can_complete.cache_info().hits, 0)
+        for i in range(1, 10):
+            with self.assertNumQueries(0):
+                # make sure the groups are retrieved from the cache.
+                len(wf.groups_who_can_complete(tuple(wf.transitions[1].items())))
+            self.assertEqual(wf.groups_who_can_complete.cache_info().hits, i)

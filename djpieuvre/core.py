@@ -3,12 +3,19 @@ import typing
 from collections import defaultdict
 
 from django.contrib.contenttypes.models import ContentType
+from django.db.models import Q
+from django.conf import settings
 from pieuvre import Workflow as PieuvreWorkflow
 from pieuvre.core import BaseDecorator
 
-from djpieuvre.constants import ON_TASK_ASSIGN_GROUP_HOOK, ON_TASK_ASSIGN_USER_HOOK
+from djpieuvre.constants import (
+    ON_TASK_ASSIGN_GROUP_HOOK,
+    ON_TASK_ASSIGN_USER_HOOK,
+    WORKFLOW_PERM_PREFIX,
+)
 from djpieuvre.mixins import WorkflowEnabled
 from djpieuvre.models import PieuvreProcess, PieuvreTask
+from djpieuvre.utils import get_app_name, camel_to_snake
 
 logger = logging.getLogger(__name__)
 _workflows = defaultdict(dict)
@@ -103,24 +110,69 @@ class Workflow(PieuvreWorkflow):
             assign_group = self._on_task_assign_group_hook.get(transition["name"])
             if assign_group:
                 for func in assign_group:
-                    groups.extend(func(task, transition))
+                    groups.extend(func(tuple(transition.items())))
             assign_user = self._on_task_assign_user_hook.get(transition["name"])
             if assign_user:
                 for func in assign_user:
-                    users.extend(func(task, transition))
+                    users.extend(func(tuple(transition.items())))
 
             if not users and not groups:
                 # Fallback to default assignment
                 assign_group = getattr(self, "default_group", None)
                 if assign_group:
-                    groups = assign_group(task)
+                    groups = assign_group()
                 assign_user = getattr(self, "default_user", None)
                 if assign_user:
-                    users = assign_user(task)
+                    users = assign_user()
 
             task.assign(transition, users=users, groups=groups)
         else:
             getattr(self, transition["name"])()
+
+    def get_authorized_transitions(
+        self,
+        state: typing.Optional[str] = None,
+        return_all: bool = True,
+        user: typing.Optional[settings.AUTH_USER_MODEL] = None,
+    ):
+        return self._get_authorized_transitions(state, return_all, user)
+
+    def _get_authorized_transitions(
+        self,
+        state: typing.Optional[str] = None,
+        return_all: bool = True,
+        user: typing.Optional[settings.AUTH_USER_MODEL] = None,
+    ):
+        available_transitions = self.get_available_transitions(state, return_all)
+
+        if not user:
+            return available_transitions
+
+        authorized_transitions = []
+        user_groups = user.groups.all()
+
+        for trans in available_transitions:
+            if not trans.get("manual", False):
+                authorized_transitions.append(trans)
+                continue
+
+            assign_group = self._on_task_assign_group_hook.get(trans["name"], [])
+            assign_user = self._on_task_assign_user_hook.get(trans["name"], [])
+            authorized_groups = []
+            authorized_users = []
+
+            for func in assign_group:
+                authorized_groups.extend(func(tuple(trans.items())))
+
+            for func in assign_user:
+                authorized_users.extend(func(tuple(trans.items())))
+
+            if user in authorized_users or set(user_groups).intersection(
+                authorized_groups
+            ):
+                authorized_transitions.append(trans)
+
+        return authorized_transitions
 
     @classmethod
     @property
@@ -129,6 +181,30 @@ class Workflow(PieuvreWorkflow):
         Return a name uniquely identifying this workflow
         """
         return cls.__name__
+
+    def is_allowed(self, user):
+        """
+        returns True if the user or it's group can access the workflow
+        """
+        # workflow without a target_model doesn't have sensitive data.
+        if (
+            not (app_name := get_app_name(self.target_model))
+            or not user
+            or user.is_superuser
+        ):
+            return True
+
+        perm = "{}_{}".format(WORKFLOW_PERM_PREFIX, camel_to_snake(self.name))
+
+        if not self._is_permission_defined(perm):
+            return True
+
+        return user.has_perm(app_name + "." + perm)
+
+    def _is_permission_defined(self, current_perm):
+        return any(
+            [perm[0] == current_perm for perm in self.process_target._meta.permissions]
+        )
 
 
 def register(cls: typing.Type[Workflow]):
