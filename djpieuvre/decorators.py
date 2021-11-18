@@ -1,9 +1,17 @@
+from functools import lru_cache
+
 from pieuvre.core import BaseDecorator
 
 from djpieuvre.constants import ON_TASK_ASSIGN_GROUP_HOOK, ON_TASK_ASSIGN_USER_HOOK
 
 
-class OnTaskAssignGroup(BaseDecorator):
+class TaskBaseDecorator(BaseDecorator):
+    def __call__(self, func):
+        func = super().__call__(func)
+        return lru_cache(maxsize=256)(func)
+
+
+class OnTaskAssignGroup(TaskBaseDecorator):
     """
     Wrap a function with this decorator to run it after
     a task is created and return a group to assign.
@@ -20,7 +28,7 @@ class OnTaskAssignGroup(BaseDecorator):
     type = ON_TASK_ASSIGN_GROUP_HOOK
 
 
-class OnTaskAssignUser(BaseDecorator):
+class OnTaskAssignUser(TaskBaseDecorator):
     """
     Wrap a function with this decorator to run it after
     a task is created and return a group to assign.

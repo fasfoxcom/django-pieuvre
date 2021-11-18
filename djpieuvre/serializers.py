@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from djpieuvre.models import PieuvreTask
+from djpieuvre.mixins import RequestInfoMixin
 
 
 class WorkflowSerializer(serializers.Serializer):
@@ -9,18 +10,22 @@ class WorkflowSerializer(serializers.Serializer):
     transitions = serializers.SerializerMethodField()
 
     def get_transitions(self, workflow):
-        return workflow.get_available_transitions()
+        return workflow.get_authorized_transitions(user=self.context.get("user", None))
 
 
-class InstanceWorkflowSerializer(serializers.Serializer):
+class InstanceWorkflowSerializer(serializers.Serializer, RequestInfoMixin):
     """
-    This is a model serializer but since the target model is not know, we make it a generic serializer.
+    This is a model serializer but since the target model is not known, we make it a generic serializer.
     Target model must inherit from WorkflowEnabled mixin.
     """
 
-    workflows = WorkflowSerializer(
-        many=True, read_only=True, source="workflow_instances"
-    )
+    workflows = serializers.SerializerMethodField()
+
+    def get_workflows(self, obj):
+        workflows = [w for w in obj.workflow_instances if w.is_allowed(self.user)]
+        return WorkflowSerializer(
+            workflows, many=True, read_only=True, context={"user": self.user}
+        ).data
 
 
 class PieuvreTaskSerializer(serializers.ModelSerializer):

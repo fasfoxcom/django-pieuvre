@@ -11,5 +11,5 @@ class WorkflowModelMixin:
         Return workflows applicable to current object
         """
         instance = self.get_object()
-        serializer = InstanceWorkflowSerializer(instance)
+        serializer = InstanceWorkflowSerializer(instance, context={"request": request})
         return Response(serializer.data)

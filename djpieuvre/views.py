@@ -5,6 +5,7 @@ from rest_framework.response import Response
 
 from djpieuvre.models import PieuvreTask
 from djpieuvre.serializers import PieuvreTaskSerializer
+from djpieuvre import utils
 
 
 class TaskViewSet(viewsets.ModelViewSet):
@@ -22,18 +23,8 @@ class TaskViewSet(viewsets.ModelViewSet):
         """
         qs = super().get_queryset()
         user = self.request.user
-        # User is always defined in our case, thanks to the IsAuthenticated permission, but this allows
-        # a superclass to remove the need for auth
-        # First filter: the task is not assigned at all. Might apply to unauthenticated users
-        f = Q(users__isnull=True) & Q(groups__isnull=True)
-        if user:
-            f = (
-                f
-                | Q(users=user)  # Or current user is assigned
-                | Q(  # Or current user belongs to a group that is assigned
-                    groups__in=user.groups.all()
-                )
-            )
+
+        f = utils.get_task_predicate(user)
         return qs.filter(f)
 
     @action(detail=True, methods=["post"])

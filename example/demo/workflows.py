@@ -27,7 +27,7 @@ class MyFirstWorkflow1(Workflow):
         },
     ]
 
-    def default_user(self, task):
+    def default_user(self):
         return User.objects.all()
 
 
@@ -51,9 +51,37 @@ class MyFirstWorkflow2(Workflow):
     ]
 
     @on_task_assign_group("complete")
-    def groups_who_can_complete(self, task, transition):
+    def groups_who_can_complete(self, transition):
         return Group.objects.filter(name__startswith="Completers")
 
     @on_task_assign_user("complete")
-    def users_who_can_complete(self, task, transition):
+    def users_who_can_complete(self, transition):
+        return User.objects.filter(groups__name__startswith="Completers")
+
+
+class MyFirstWorkflow3(Workflow):
+    persist = True
+    states = ["init", "progressing", "completed"]
+    target_model = MyProcess
+    transitions = [
+        {
+            "name": "initialize",
+            "source": "init",
+            "destination": "progressing",
+            "manual": True,
+        },
+        {
+            "name": "complete",
+            "source": "progressing",
+            "destination": "completed",
+            "manual": True,
+        },
+    ]
+
+    @on_task_assign_group("complete")
+    def groups_who_can_complete(self, transition):
+        return Group.objects.filter(name__startswith="Completers")
+
+    @on_task_assign_user("complete")
+    def users_who_can_complete(self, transition):
         return User.objects.filter(groups__name__startswith="Completers")
