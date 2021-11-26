@@ -333,6 +333,9 @@ class GatewayTest(AuthenticatedTasksTests):
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.json()[0]["task"], "submitted")
 
+        self.assertEqual(r.json()[0]["model"], "myprocess")
+        self.assertEqual(r.json()[0]["model_id"], str(wf.process_target.id))
+
         task = r.json()[0]
         r = self.client.get(reverse("pieuvretask-detail", args=[task["id"]]))
         # the current user should have a task "submitted"
