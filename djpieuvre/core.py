@@ -3,10 +3,11 @@ import typing
 from collections import defaultdict
 
 from django.contrib.contenttypes.models import ContentType
+from django.db import IntegrityError
 from django.db.models import Q
 from django.conf import settings
 from pieuvre import Workflow as PieuvreWorkflow
-from pieuvre.core import BaseDecorator
+from pieuvre.exceptions import TransitionAmbiguous, TransitionUnavailable
 
 from djpieuvre.constants import (
     ON_TASK_ASSIGN_GROUP_HOOK,
@@ -41,6 +42,7 @@ class Workflow(PieuvreWorkflow):
         ON_TASK_ASSIGN_GROUP_HOOK,
         ON_TASK_ASSIGN_USER_HOOK,
     )
+    fancy_name = None
 
     def __init_subclass__(cls, **kwargs):
         """
@@ -79,31 +81,48 @@ class Workflow(PieuvreWorkflow):
 
                 # Override model with the PieuvreProcess
                 # FIXME: we should not save the object here so that it is only saved if the workflow advances
-                model, _ = PieuvreProcess.objects.get_or_create(
-                    content_type=ContentType.objects.get_for_model(model),
-                    object_id=model.pk,
-                    workflow_name=self.__class__.name,
-                    defaults={
-                        PieuvreProcess.STATE_FIELD_NAME: initial_state,
-                        "workflow_version": getattr(self, "version", 1),
-                    },
-                )
+
+                try:
+                    # when get_or_create is executed in concurrent call, an integrity error would be raised to
+                    # alert about an integrity violation
+                    # a PieuvreProcess has unicity constraint on (content_type, object_id, workflow_name)
+                    model, _ = PieuvreProcess.objects.get_or_create(
+                        content_type=ContentType.objects.get_for_model(model),
+                        object_id=model.pk,
+                        workflow_name=self.__class__.name,
+                        defaults={
+                            PieuvreProcess.STATE_FIELD_NAME: initial_state,
+                            "workflow_version": getattr(self, "version", 1),
+                        },
+                    )
+                except IntegrityError as e:
+
+                    model = PieuvreProcess.objects.get(
+                        content_type=ContentType.objects.get_for_model(model),
+                        object_id=model.pk,
+                        workflow_name=self.__class__.name,
+                    )
 
         super().__init__(model)
 
-    def advance_workflow(self):
-        """
-        Advance the workflow if the transition is automatic, or create a manual task if the
-        transition is meant to be manual.
-        If the transition is manual, the task must be completed for the workflow to advance.
-        """
+    def _advance_workflow(self):
+
         transition = self._get_next_transition()
+
         if transition.get("manual", False):
             # Manual transition: we must not advance the workflow, only create a task
             # TODO: access rights
-            task, _ = PieuvreTask.objects.get_or_create(
-                process=self.model, task=transition["name"]
-            )
+            try:
+                # when get_or_create is executed in concurrent call, an integrity error would be raised to
+                # alert about an integrity violation
+                # a PieuvreTask has unicity constraint on (process, task)
+                task, _ = PieuvreTask.objects.get_or_create(
+                    process=self.model, task=transition["source"]
+                )
+            except IntegrityError as e:
+                task = PieuvreProcess.objects.get(
+                    process=self.model, task=transition["source"]
+                )
 
             # Check if the workflow gives us insights about whom to assign
             groups, users = [], []
@@ -129,19 +148,40 @@ class Workflow(PieuvreWorkflow):
         else:
             getattr(self, transition["name"])()
 
+    def advance_workflow(self):
+        """
+        Advance the workflow if the transition is automatic, or create a manual task if the
+        transition is meant to be manual.
+        If the transition is manual, the task must be completed for the workflow to advance.
+        """
+
+        can_advance = True
+
+        while can_advance:
+            # if the current transition is manual, we can advance only once
+            try:
+                next_transition = self._get_next_transition()
+            except TransitionUnavailable as e:
+                can_advance = False
+            else:
+                is_next_manual = next_transition.get("manual", False)
+
+                self._advance_workflow()
+                can_advance = not is_next_manual
+
     def get_authorized_transitions(
-        self,
-        state: typing.Optional[str] = None,
-        return_all: bool = True,
-        user: typing.Optional[settings.AUTH_USER_MODEL] = None,
+            self,
+            state: typing.Optional[str] = None,
+            return_all: bool = True,
+            user: typing.Optional[settings.AUTH_USER_MODEL] = None,
     ):
         return self._get_authorized_transitions(state, return_all, user)
 
     def _get_authorized_transitions(
-        self,
-        state: typing.Optional[str] = None,
-        return_all: bool = True,
-        user: typing.Optional[settings.AUTH_USER_MODEL] = None,
+            self,
+            state: typing.Optional[str] = None,
+            return_all: bool = True,
+            user: typing.Optional[settings.AUTH_USER_MODEL] = None,
     ):
         available_transitions = self.get_available_transitions(state, return_all)
 
@@ -168,7 +208,7 @@ class Workflow(PieuvreWorkflow):
                 authorized_users.extend(func(tuple(trans.items())))
 
             if user in authorized_users or set(user_groups).intersection(
-                authorized_groups
+                    authorized_groups
             ):
                 authorized_transitions.append(trans)
 
@@ -188,9 +228,9 @@ class Workflow(PieuvreWorkflow):
         """
         # workflow without a target_model doesn't have sensitive data.
         if (
-            not (app_name := get_app_name(self.target_model))
-            or not user
-            or user.is_superuser
+                not (app_name := get_app_name(self.target_model))
+                or not user
+                or user.is_superuser
         ):
             return True
 
@@ -205,6 +245,24 @@ class Workflow(PieuvreWorkflow):
         return any(
             [perm[0] == current_perm for perm in self.process_target._meta.permissions]
         )
+
+    def _get_next_transition(self):
+        """
+        Return the next transition that can be reached.
+        The workflow must be unambiguous (a single transition must be possible).
+        """
+        state = self._get_model_state()
+        transitions = self.get_available_transitions(state, return_all=False)
+        if len(transitions) > 1 and self._check_manual_transitions(transitions):
+            return transitions[0]
+
+        return super()._get_next_transition()
+
+    def _check_manual_transitions(self, transitions):
+        """
+        Check whether all next transitions are manual
+        """
+        return all([transition.get("manual", False) for transition in transitions])
 
 
 def register(cls: typing.Type[Workflow]):

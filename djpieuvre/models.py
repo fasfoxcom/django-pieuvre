@@ -29,6 +29,10 @@ class PieuvreProcess(WorkflowEnabled, models.Model):
             raise ValueError(f"Workflow {self.workflow_name} is not registered")
         return workflow
 
+    class Meta:
+        unique_together = ("content_type", "object_id", "workflow_name")
+        ordering = ("created_at",)
+
 
 class PieuvreTask(models.Model):
     process = models.ForeignKey(PieuvreProcess, on_delete=models.CASCADE)
@@ -54,6 +58,11 @@ class PieuvreTask(models.Model):
         if groups:
             self.groups.set(groups)
 
-    def complete(self):
+    def complete(self, transition):
         self.state = TASK_STATES.DONE
-        self.process.workflow.run_transition(self.task)
+        self.process.workflow.run_transition(transition)
+        self.process.workflow.advance_workflow()
+
+    class Meta:
+        unique_together = ("process", "task")
+        ordering = ("created_at",)

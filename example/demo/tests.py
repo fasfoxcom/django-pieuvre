@@ -7,9 +7,15 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from djpieuvre.constants import TASK_STATES
 from djpieuvre.models import PieuvreTask
 from .models import MyProcess
-from .workflows import MyFirstWorkflow1, MyFirstWorkflow2, MyFirstWorkflow3
+from .workflows import (
+    MyFirstWorkflow1,
+    MyFirstWorkflow2,
+    MyFirstWorkflow3,
+    MyFirstWorkflow4, MyFirstWorkflow5,
+)
 
 
 class UserFactory(factory.django.DjangoModelFactory):
@@ -54,15 +60,16 @@ class TasksTests(APITestCase):
         # There should be a Task now
         task = PieuvreTask.objects.first()
         self.assertIsNotNone(task)
-        self.assertEqual(task.task, "finish")
+        self.assertEqual(task.task, "submitted")
         self.assertEqual(task.process, wf.model)
         self.assertEqual(task.state, "created")
         # Make sure that the user is assigned (because this workflows has a default assignment)
         self.assertEqual(task.groups.count(), 0)
         self.assertEqual(task.users.first(), user)
         # We can complete the task
-        task.complete()
+        task.complete("finish")
         self.assertEqual(task.state, "done")
+        self.assertEqual(task.task, "submitted")
 
     def test_workflow_task_assignment(self):
         users = [UserFactory() for i in range(20)]
@@ -104,7 +111,8 @@ class AuthenticatedTasksTests(TasksTests):
         self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
         # But POST should be allowed
         response = self.client.post(
-            reverse("pieuvretask-complete", kwargs={"pk": task.pk})
+            reverse("pieuvretask-complete", kwargs={"pk": task.pk}),
+            data={"transition": "finish"},
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         task.refresh_from_db()
@@ -158,10 +166,10 @@ class AuthenticatedTasksTests(TasksTests):
             reverse("myprocess-workflows", kwargs={"pk": process.pk})
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        js = response.json()
-        self.assertEqual(len(js["workflows"]), 2)
-        self.assertEqual(js["workflows"][0]["state"], "submitted")
-        for wrkf in js["workflows"]:
+        task = response.json()
+        self.assertEqual(len(task["workflows"]), 3)
+        self.assertEqual(task["workflows"][0]["state"], "submitted")
+        for wrkf in task["workflows"]:
             self.assertNotEqual(wrkf["name"], MyFirstWorkflow2.name)
 
     def test_unauthorized_user_cannot_get_manual_transition(self):
@@ -173,14 +181,14 @@ class AuthenticatedTasksTests(TasksTests):
             reverse("myprocess-workflows", kwargs={"pk": process.pk})
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        js = response.json()
-        self.assertEqual(len(js["workflows"]), 2)
+        task = response.json()
+        self.assertEqual(len(task["workflows"]), 3)
 
-        self.assertEqual(js["workflows"][0]["state"], "created")
-        self.assertEqual(len(js["workflows"][0]["transitions"]), 1)
+        self.assertEqual(task["workflows"][0]["state"], "created")
+        self.assertEqual(len(task["workflows"][0]["transitions"]), 1)
 
-        self.assertEqual(js["workflows"][1]["state"], "progressing")
-        self.assertEqual(len(js["workflows"][1]["transitions"]), 0)
+        self.assertEqual(task["workflows"][1]["state"], "progressing")
+        self.assertEqual(len(task["workflows"][1]["transitions"]), 0)
 
         # Make the user a completer
         GroupFactory(name="Completers Team")
@@ -190,20 +198,18 @@ class AuthenticatedTasksTests(TasksTests):
             reverse("myprocess-workflows", kwargs={"pk": process.pk})
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        js = response.json()
+        task = response.json()
 
-        self.assertEqual(js["workflows"][0]["state"], "created")
-        self.assertEqual(len(js["workflows"][0]["transitions"]), 1)
+        self.assertEqual(task["workflows"][0]["state"], "created")
+        self.assertEqual(len(task["workflows"][0]["transitions"]), 1)
 
         # user can get complete transition since he is a completer
-        self.assertEqual(js["workflows"][1]["state"], "progressing")
-        self.assertEqual(len(js["workflows"][1]["transitions"]), 1)
+        self.assertEqual(task["workflows"][1]["state"], "progressing")
+        self.assertEqual(len(task["workflows"][1]["transitions"]), 1)
 
     def test_caching(self):
         process = MyProcess.objects.create()
-        wf = self._advance_and_reload_workflow(
-            MyFirstWorkflow3, process
-        )
+        wf = self._advance_and_reload_workflow(MyFirstWorkflow3, process)
         GroupFactory(name="Completers Team")
         wf.groups_who_can_complete.cache_clear()
         with self.assertNumQueries(1):
@@ -215,3 +221,233 @@ class AuthenticatedTasksTests(TasksTests):
                 # make sure the groups are retrieved from the cache.
                 len(wf.groups_who_can_complete(tuple(wf.transitions[1].items())))
             self.assertEqual(wf.groups_who_can_complete.cache_info().hits, i)
+
+    def test_task_detail_view_contains_next_available_transitions(self):
+        process = MyProcess.objects.create()
+        wf = self._advance_and_reload_workflow(
+            MyFirstWorkflow4, process, initial_state="edited"
+        )
+        # The current user is a researcher
+        GroupFactory(name="Researcher Team")
+        self.user.groups.add(Group.objects.get(name="Researcher Team"))
+        response = self.client.get(reverse("pieuvretask-list"))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.json()), 1)
+        self.assertNotIn("transitions", response.data[0])
+
+        response = self.client.get(
+            reverse("pieuvretask-detail", args=[response.data[0]["id"]])
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        task = response.data
+        self.assertIn("transitions", task)
+        self.assertEqual(len(task["transitions"]), 1)
+        self.assertEqual(task["task"], "edited")
+
+    def test_user_should_be_able_to_choose_transition_to_be_executed(self):
+        process = MyProcess.objects.create()
+        wf = self._advance_and_reload_workflow(
+            MyFirstWorkflow4, process, initial_state="submitted"
+        )
+        # The current user is a researcher
+        GroupFactory(name="Evaluator Team")
+        self.user.groups.add(Group.objects.get(name="Evaluator Team"))
+        response = self.client.get(reverse("pieuvretask-list"))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.json()), 1)
+
+        response = self.client.get(
+            reverse("pieuvretask-detail", args=[response.data[0]["id"]])
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        task = response.data
+        self.assertIn("transitions", task)
+        self.assertEqual(len(task["transitions"]), 2)
+
+        self.assertEqual(task["transitions"][0]["name"], "accept")
+        self.assertEqual(task["transitions"][1]["name"], "reject")
+
+        response = self.client.post(
+            reverse("pieuvretask-complete", kwargs={"pk": task["id"]}),
+            data={"transition": "reject"},
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        task = response.data
+        response = self.client.get(
+            reverse("myprocess-workflows", kwargs={"pk": task["id"]})
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        task = response.data
+        self.assertEqual(task["workflows"][2]["state"], "edited")
+
+    def test_task_filter(self):
+        process1 = MyProcess.objects.create()
+        process2 = MyProcess.objects.create()
+        wf = self._advance_and_reload_workflow(
+            MyFirstWorkflow3, process1, initial_state="progressing"
+        )
+        self.assertTrue(wf.model.pieuvretask_set.exists())
+        task = wf.model.pieuvretask_set.first()
+        task.complete("complete")
+        task.save()
+        self.assertEqual(task.state, TASK_STATES.DONE)
+
+        wf = self._advance_and_reload_workflow(MyFirstWorkflow3, process2)
+        self.assertEqual(PieuvreTask.objects.count(), 2)
+        task = wf.model.pieuvretask_set.first()
+        self.assertEqual(task.state, TASK_STATES.CREATED)
+
+        response = self.client.get(reverse("pieuvretask-list"))
+
+        js = response.data
+        self.assertEqual(len(js), 2)
+        response = self.client.get(
+            reverse("pieuvretask-list"), data={"status": TASK_STATES.DONE}
+        )
+        js = response.data
+        self.assertEqual(len(js), 1)
+
+
+class GatewayTest(AuthenticatedTasksTests):
+    def test_workflow_gateway_flow(self):
+        # we test here that we can leave a source state when there are multiple manual transitions that can be applied
+        # to go to the next state
+        process = MyProcess.objects.create()
+        wf = self._advance_and_reload_workflow(
+            MyFirstWorkflow4, process, initial_state="submitted"
+        )
+
+        wf.advance_workflow()
+
+        # we create a task which have this state as source
+        task = PieuvreTask.objects.first()
+        self.assertEqual(task.process.state, "submitted")
+
+        g = GroupFactory(name="Evaluator")
+        self.user.groups.add(g)
+
+        r = self.client.get(reverse("pieuvretask-list"))
+
+        # let's zoom into the task
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()[0]["task"], "submitted")
+
+        task = r.json()[0]
+        r = self.client.get(reverse("pieuvretask-detail", args=[task["id"]]))
+        # the current user should have a task "submitted"
+
+        self.assertEqual(r.status_code, 200)
+        task_detail = r.json()
+        self.assertEqual(task_detail["task"], "submitted")
+        self.assertEqual(len(task_detail["transitions"]), 2)
+
+        transitions = task_detail["transitions"]
+        self.assertEqual(transitions[0]["name"], "accept")
+        self.assertEqual(transitions[1]["name"], "reject")
+
+        r = self.client.post(
+            reverse("pieuvretask-complete", kwargs={"pk": task_detail["id"]}),
+            data={"transition": "accept"},
+        )
+
+        self.assertEqual(r.status_code, 200)
+
+        bd_task = PieuvreTask.objects.get(pk=task_detail["id"])
+        self.assertEqual(bd_task.state, "done")
+        wf.model.refresh_from_db()
+
+        self.assertEqual(wf.model.state, "accepted")
+
+
+class AdvanceWorkflowTest(APITestCase):
+    def test_can_advance_workflow_from_api(self):
+        process = MyProcess.objects.create()
+        wflw = MyFirstWorkflow1(model=process)
+        self.assertEqual(wflw.state, "created")
+        r = self.client.post(
+            reverse("myprocess-advance-workflow", args=[process.pk]),
+            data={"workflow": wflw.model.pk},
+        )
+
+        self.assertEqual(r.status_code, 200)
+        wflw.model.refresh_from_db()
+        self.assertEqual(wflw.state, "submitted")
+
+    def test_try_to_start_workflow_on_already_running_workflow(self):
+        process = MyProcess.objects.create()
+        wflw = MyFirstWorkflow4(model=process, initial_state="edited")
+        self.assertEqual(wflw.state, "edited")
+        r = self.client.post(
+            reverse(
+                "myprocess-advance-workflow", args=[process.pk]
+            ),
+            data={"workflow": wflw.model.pk},
+        )
+
+        self.assertEqual(r.status_code, 400)
+        wflw.model.refresh_from_db()
+        self.assertEqual(wflw.state, "edited")
+
+    def test_auto_advance_workflow(self):
+        process = MyProcess.objects.create()
+        workflow = MyFirstWorkflow5(model=process)
+
+        self.assertEqual(workflow.state, "init")
+
+        workflow.advance_workflow()
+
+        workflow.model.refresh_from_db()
+        self.assertEqual(workflow.state, "submitted")
+
+        task = PieuvreTask.objects.all()[0]
+
+        task.complete("accept")
+        workflow.model.refresh_from_db()
+        self.assertEqual(workflow.state, "published")
+
+        task = PieuvreTask.objects.all()[1]
+        task.complete("comment")
+        workflow.model.refresh_from_db()
+        self.assertEqual(workflow.state, "commented")
+
+        task = PieuvreTask.objects.all()[2]
+        task.complete("archive")
+        workflow.model.refresh_from_db()
+        self.assertEqual(workflow.state, "archived")
+
+
+
+class WorkflowViewTest(APITestCase):
+
+    def test_can_retrieve_workflow_detail_on_model(self):
+        process = MyProcess.objects.create()
+        wflw = MyFirstWorkflow4(model=process, initial_state="edited")
+
+        r = self.client.get(
+            reverse(
+                "myprocess-detail", args=[process.pk]
+            )
+        )
+
+        self.assertEqual(r.status_code, 200)
+        current_wflw = list(filter(lambda x: x["pk"] == str(wflw.model.pk) ,r.json()["workflows"]))[0]
+
+        self.assertEqual(current_wflw["name"], "MyFirstWorkflow4")
+        self.assertEqual(current_wflw["state"], "edited")
+        self.assertEqual(current_wflw["fancy_name"], "My first workflow 4")
+
+    def test_can_list_workflow_on_model(self):
+        process = MyProcess.objects.create()
+
+        r = self.client.get(
+            reverse(
+                "myprocess-detail", args=[process.pk]
+            )
+        )
+
+        self.assertEqual(r.status_code, 200)
+
+        workflows = r.json()["workflows"]
+
+        self.assertEqual(len(workflows), 3)

@@ -44,7 +44,7 @@ setup(
         "Programming Language :: Python :: 3.9",
     ],
     packages=find_packages(exclude=("tests", "docs")),
-    install_requires=[],
+    install_requires=["drf-spectacular", "django-filter", "Django>3.1"],
     setup_requires=["wheel"],
     test_suite="tests",
     tests_require=extras_require["test"],
