@@ -29,6 +29,9 @@ class PieuvreProcess(WorkflowEnabled, models.Model):
             raise ValueError(f"Workflow {self.workflow_name} is not registered")
         return workflow
 
+    def __str__(self):
+        return f"Process {self.workflow_name} {self.content_type.model}({self.object_id})"
+
     class Meta:
         unique_together = ("content_type", "object_id", "workflow_name")
         ordering = ("created_at",)
@@ -62,6 +65,9 @@ class PieuvreTask(models.Model):
         self.state = TASK_STATES.DONE
         self.process.workflow.run_transition(transition)
         self.process.workflow.advance_workflow()
+
+    def __str__(self):
+        return f"Task {self.name} {self.process.content_type.model} ({self.process.object_id})"
 
     class Meta:
         unique_together = ("process", "task")
