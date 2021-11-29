@@ -40,7 +40,7 @@ class PieuvreTaskListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = PieuvreTask
-        read_only_fields = ["id", "process_id","model", "model_id", "state", "name", "task"]
+        read_only_fields = ["id", "process_id","model", "model_id", "state", "name", "task", "created_at"]
 
         fields = read_only_fields + []
 
