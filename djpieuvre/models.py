@@ -60,7 +60,7 @@ class PieuvreTask(models.Model):
 
     def complete(self, transition):
         self.state = TASK_STATES.DONE
-        self.process.workflow.run_transition(transition)
+        self.process.workflow.run_transition(transition, self)
         self.process.workflow.advance_workflow()
 
     class Meta:

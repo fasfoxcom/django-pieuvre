@@ -75,10 +75,10 @@ class PieuvreTaskCompleteSerializer(serializers.Serializer):
         # the workflow state changes.
         with transaction.atomic():
             try:
-                self.instance.complete(transition)
                 if self.instance.data is None:
                     self.instance.data = {}
                 self.instance.data["reason"] = self.validated_data.get("reason")
+                self.instance.complete(transition)
                 self.instance.save()
             except (
                 TransitionDoesNotExist,
