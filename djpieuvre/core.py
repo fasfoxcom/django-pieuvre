@@ -170,18 +170,18 @@ class Workflow(PieuvreWorkflow):
                 can_advance = not is_next_manual
 
     def get_authorized_transitions(
-            self,
-            state: typing.Optional[str] = None,
-            return_all: bool = True,
-            user: typing.Optional[settings.AUTH_USER_MODEL] = None,
+        self,
+        state: typing.Optional[str] = None,
+        return_all: bool = True,
+        user: typing.Optional[settings.AUTH_USER_MODEL] = None,
     ):
         return self._get_authorized_transitions(state, return_all, user)
 
     def _get_authorized_transitions(
-            self,
-            state: typing.Optional[str] = None,
-            return_all: bool = True,
-            user: typing.Optional[settings.AUTH_USER_MODEL] = None,
+        self,
+        state: typing.Optional[str] = None,
+        return_all: bool = True,
+        user: typing.Optional[settings.AUTH_USER_MODEL] = None,
     ):
         available_transitions = self.get_available_transitions(state, return_all)
 
@@ -208,7 +208,7 @@ class Workflow(PieuvreWorkflow):
                 authorized_users.extend(func(tuple(trans.items())))
 
             if user in authorized_users or set(user_groups).intersection(
-                    authorized_groups
+                authorized_groups
             ):
                 authorized_transitions.append(trans)
 
@@ -228,9 +228,9 @@ class Workflow(PieuvreWorkflow):
         """
         # workflow without a target_model doesn't have sensitive data.
         if (
-                not (app_name := get_app_name(self.target_model))
-                or not user
-                or user.is_superuser
+            not (app_name := get_app_name(self.target_model))
+            or not user
+            or user.is_superuser
         ):
             return True
 

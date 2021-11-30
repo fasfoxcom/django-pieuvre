@@ -14,7 +14,8 @@ from .workflows import (
     MyFirstWorkflow1,
     MyFirstWorkflow2,
     MyFirstWorkflow3,
-    MyFirstWorkflow4, MyFirstWorkflow5,
+    MyFirstWorkflow4,
+    MyFirstWorkflow5,
 )
 
 
@@ -269,7 +270,7 @@ class AuthenticatedTasksTests(TasksTests):
 
         response = self.client.post(
             reverse("pieuvretask-complete", kwargs={"pk": task["id"]}),
-            data={"transition": "reject"},
+            data={"transition": "reject", "reason": "bad robot"},
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
@@ -278,8 +279,15 @@ class AuthenticatedTasksTests(TasksTests):
             reverse("myprocess-workflows", kwargs={"pk": task["id"]})
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+        process = response.data
+        self.assertEqual(process["workflows"][2]["state"], "edited")
+
+        response = self.client.get(
+            reverse("pieuvretask-detail", kwargs={"pk": task["id"]})
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
         task = response.data
-        self.assertEqual(task["workflows"][2]["state"], "edited")
+        self.assertEqual(task["data"]["reason"], "bad robot")
 
     def test_task_filter(self):
         process1 = MyProcess.objects.create()
@@ -379,9 +387,7 @@ class AdvanceWorkflowTest(APITestCase):
         wflw = MyFirstWorkflow4(model=process, initial_state="edited")
         self.assertEqual(wflw.state, "edited")
         r = self.client.post(
-            reverse(
-                "myprocess-advance-workflow", args=[process.pk]
-            ),
+            reverse("myprocess-advance-workflow", args=[process.pk]),
             data={"workflow": wflw.model.pk},
         )
 
@@ -417,21 +423,17 @@ class AdvanceWorkflowTest(APITestCase):
         self.assertEqual(workflow.state, "archived")
 
 
-
 class WorkflowViewTest(APITestCase):
-
     def test_can_retrieve_workflow_detail_on_model(self):
         process = MyProcess.objects.create()
         wflw = MyFirstWorkflow4(model=process, initial_state="edited")
 
-        r = self.client.get(
-            reverse(
-                "myprocess-detail", args=[process.pk]
-            )
-        )
+        r = self.client.get(reverse("myprocess-detail", args=[process.pk]))
 
         self.assertEqual(r.status_code, 200)
-        current_wflw = list(filter(lambda x: x["pk"] == str(wflw.model.pk) ,r.json()["workflows"]))[0]
+        current_wflw = list(
+            filter(lambda x: x["pk"] == str(wflw.model.pk), r.json()["workflows"])
+        )[0]
 
         self.assertEqual(current_wflw["name"], "MyFirstWorkflow4")
         self.assertEqual(current_wflw["state"], "edited")
@@ -440,11 +442,7 @@ class WorkflowViewTest(APITestCase):
     def test_can_list_workflow_on_model(self):
         process = MyProcess.objects.create()
 
-        r = self.client.get(
-            reverse(
-                "myprocess-detail", args=[process.pk]
-            )
-        )
+        r = self.client.get(reverse("myprocess-detail", args=[process.pk]))
 
         self.assertEqual(r.status_code, 200)
 

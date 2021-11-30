@@ -1,12 +1,7 @@
 from drf_spectacular.utils import extend_schema
 from django_filters import rest_framework as filters
 from drf_spectacular.utils import extend_schema
-from pieuvre.exceptions import (
-    TransitionDoesNotExist,
-    InvalidTransition,
-    TransitionUnavailable,
-    TransitionAmbiguous,
-)
+
 from rest_framework import mixins, viewsets, permissions, serializers
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -47,10 +42,7 @@ class TaskViewSet(
     filterset_class = TaskFilterSet
 
     def get_serializer_class(self):
-        if self.action in (
-                "retrieve",
-                "complete"
-        ):
+        if self.action in ("retrieve", "complete"):
             return PieuvreTaskDetailSerializer
         return self.serializer_class
 
@@ -68,28 +60,13 @@ class TaskViewSet(
     @action(detail=True, methods=["post"])
     def complete(self, request, *args, **kwargs):
 
-        deserializer = PieuvreTaskCompleteSerializer(data=request.data)
+        task = self.get_object()
+
+        deserializer = PieuvreTaskCompleteSerializer(instance=task, data=request.data)
         if not deserializer.is_valid():
             raise serializers.ValidationError(deserializer.errors)
 
-        task = self.get_object()
-
-        transition = deserializer.validated_data["transition"]
-
-        # we can't mark a task as done unless
-        # the workflow state changes.
-        with transaction.atomic():
-            try:
-                task.complete(transition)
-                task.save()
-            except (
-                    TransitionDoesNotExist,
-                    InvalidTransition,
-                    TransitionUnavailable,
-                    TransitionAmbiguous,
-            ) as we:
-                raise serializers.ValidationError(we.message)
-
+        deserializer.save()
         serializer = self.get_serializer(task)
 
         return Response(serializer.data)

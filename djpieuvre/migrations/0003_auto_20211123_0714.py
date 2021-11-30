@@ -6,16 +6,16 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('djpieuvre', '0002_auto_20211119_1727'),
+        ("djpieuvre", "0002_auto_20211119_1727"),
     ]
 
     operations = [
         migrations.AlterModelOptions(
-            name='pieuvreprocess',
-            options={'ordering': ('created_at',)},
+            name="pieuvreprocess",
+            options={"ordering": ("created_at",)},
         ),
         migrations.AlterModelOptions(
-            name='pieuvretask',
-            options={'ordering': ('created_at',)},
+            name="pieuvretask",
+            options={"ordering": ("created_at",)},
         ),
     ]

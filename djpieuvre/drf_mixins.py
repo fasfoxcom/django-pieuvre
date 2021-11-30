@@ -68,7 +68,7 @@ class AdvanceWorkflowMixin(object):
 
     @staticmethod
     def _perform_advance_workflow(
-            pieuvre_process: PieuvreProcess, obj: WorkflowEnabled
+        pieuvre_process: PieuvreProcess, obj: WorkflowEnabled
     ):
 
         target_workflows = list(

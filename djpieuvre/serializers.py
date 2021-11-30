@@ -1,8 +1,15 @@
+from django.db import transaction
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from djpieuvre.models import PieuvreTask, PieuvreProcess
 from djpieuvre.mixins import RequestInfoMixin
+from pieuvre.exceptions import (
+    TransitionDoesNotExist,
+    InvalidTransition,
+    TransitionUnavailable,
+    TransitionAmbiguous,
+)
 
 
 class WorkflowSerializer(serializers.Serializer):
@@ -49,20 +56,40 @@ class PieuvreTaskDetailSerializer(PieuvreTaskListSerializer):
 
     class Meta(PieuvreTaskListSerializer.Meta):
         fields = [f for f in PieuvreTaskListSerializer.Meta.fields] + [
-            "transitions",
+            "transitions", "data"
         ]
 
 
 class PieuvreTaskCompleteSerializer(serializers.Serializer):
+    reason = serializers.CharField(required=False, allow_blank=True)
     transition = serializers.CharField(
         write_only=True,
         required=True,
         help_text="The name of the transition to be " "executed",
     )
 
+    def save(self, **kwargs):
+        transition = self.validated_data["transition"]
+
+        # we can't mark a task as done unless
+        # the workflow state changes.
+        with transaction.atomic():
+            try:
+                self.instance.complete(transition)
+                if self.instance.data is None:
+                    self.instance.data = {}
+                self.instance.data["reason"] = self.validated_data.get("reason")
+                self.instance.save()
+            except (
+                TransitionDoesNotExist,
+                InvalidTransition,
+                TransitionUnavailable,
+                TransitionAmbiguous,
+            ) as we:
+                raise serializers.ValidationError(we.message)
+
 
 class AdvanceWorkflowSerializer(serializers.Serializer):
     workflow = serializers.PrimaryKeyRelatedField(
         queryset=PieuvreProcess.objects.all(), required=True
     )
-
