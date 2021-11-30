@@ -29,6 +29,10 @@ class PieuvreProcess(WorkflowEnabled, models.Model):
             raise ValueError(f"Workflow {self.workflow_name} is not registered")
         return workflow
 
+    @property
+    def workflow_fancy_name(self):
+        return self.get_workflow_class().fancy_name
+
     class Meta:
         unique_together = ("content_type", "object_id", "workflow_name")
         ordering = ("created_at",)

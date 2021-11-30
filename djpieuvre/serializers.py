@@ -41,9 +41,20 @@ class InstanceWorkflowSerializer(serializers.Serializer, RequestInfoMixin):
 
 
 class PieuvreTaskListSerializer(serializers.ModelSerializer):
+    process_name = serializers.CharField(source="process.workflow_name")
+    process_fancy_name = serializers.CharField(source="process.workflow_fancy_name")
+
     class Meta:
         model = PieuvreTask
-        fields = ["id", "process_id", "state", "name", "task"]
+        fields = [
+            "id",
+            "process_id",
+            "process_name",
+            "process_fancy_name",
+            "state",
+            "name",
+            "task",
+        ]
 
 
 class PieuvreTaskDetailSerializer(PieuvreTaskListSerializer):
@@ -56,7 +67,8 @@ class PieuvreTaskDetailSerializer(PieuvreTaskListSerializer):
 
     class Meta(PieuvreTaskListSerializer.Meta):
         fields = [f for f in PieuvreTaskListSerializer.Meta.fields] + [
-            "transitions", "data"
+            "transitions",
+            "data",
         ]
 
 

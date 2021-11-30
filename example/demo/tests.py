@@ -102,7 +102,10 @@ class AuthenticatedTasksTests(TasksTests):
         )
         response = self.client.get(reverse("pieuvretask-list"))
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.json()), 1)
+        j = response.json()
+        self.assertEqual(len(j), 1)
+        self.assertEqual(j[0]["process_name"], "MyFirstWorkflow1")
+        self.assertEqual(j[0]["process_fancy_name"], "My first workflow")
         task = PieuvreTask.objects.first()
         # Now try to complete the task
         # GET should be forbidden
