@@ -35,7 +35,7 @@ class TaskViewSet(
     Viewset to handle tasks
     """
 
-    queryset = PieuvreTask.objects.all()
+    queryset = PieuvreTask.objects.select_related("process").all()
     serializer_class = PieuvreTaskListSerializer
     permission_classes = [permissions.IsAuthenticated]
     filter_backends = [filters.DjangoFilterBackend]
