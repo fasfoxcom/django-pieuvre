@@ -41,20 +41,28 @@ class InstanceWorkflowSerializer(serializers.Serializer, RequestInfoMixin):
 
 
 class PieuvreTaskListSerializer(serializers.ModelSerializer):
+    process_id = serializers.CharField()
+    model = serializers.CharField(source="process.content_type.model")
+    model_id = serializers.CharField(source="process.object_id")
     process_name = serializers.CharField(source="process.workflow_name")
     process_fancy_name = serializers.CharField(source="process.workflow_fancy_name")
 
     class Meta:
         model = PieuvreTask
-        fields = [
+        read_only_fields = [
             "id",
             "process_id",
             "process_name",
             "process_fancy_name",
+            "model",
+            "model_id",
             "state",
             "name",
             "task",
+            "created_at"
         ]
+
+        fields = read_only_fields + []
 
 
 class PieuvreTaskDetailSerializer(PieuvreTaskListSerializer):
@@ -77,7 +85,7 @@ class PieuvreTaskCompleteSerializer(serializers.Serializer):
     transition = serializers.CharField(
         write_only=True,
         required=True,
-        help_text="The name of the transition to be " "executed",
+        help_text="The name of the transition to execute",
     )
 
     def save(self, **kwargs):
