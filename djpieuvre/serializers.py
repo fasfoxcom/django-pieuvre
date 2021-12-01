@@ -1,5 +1,6 @@
 from django.db import transaction
 from drf_spectacular.utils import extend_schema_field
+from extended_choices import Choices
 from rest_framework import serializers
 
 from djpieuvre.models import PieuvreTask, PieuvreProcess
@@ -19,9 +20,20 @@ class WorkflowSerializer(serializers.Serializer):
     name = serializers.CharField()
     state = serializers.CharField()
     transitions = serializers.SerializerMethodField()
+    states = serializers.SerializerMethodField()
 
     def get_transitions(self, workflow):
         return workflow.get_authorized_transitions(user=self.context.get("user", None))
+
+    def get_states(self, workflow):
+
+        if not isinstance(workflow.states, Choices):
+            return workflow.states
+
+        states = {}
+        for key in workflow.states.values.keys():
+            states[key] = workflow.states.for_value(key).display
+        return states
 
 
 class InstanceWorkflowSerializer(serializers.Serializer, RequestInfoMixin):

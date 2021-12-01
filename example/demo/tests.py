@@ -449,6 +449,18 @@ class WorkflowViewTest(APITestCase):
         self.assertEqual(current_wflw["state"], "edited")
         self.assertEqual(current_wflw["fancy_name"], "My first workflow 4")
 
+        process = MyProcess.objects.create()
+        wflw = MyFirstWorkflow1(model=process)
+        r = self.client.get(reverse("myprocess-detail", args=[process.pk]))
+
+        current_wflw = list(
+            filter(lambda x: x["pk"] == str(wflw.model.pk), r.json()["workflows"])
+        )[0]
+        self.assertEqual(current_wflw["name"], "MyFirstWorkflow1")
+        self.assertEqual(current_wflw["state"], "created")
+        self.assertEqual(current_wflw["fancy_name"], "My first workflow")
+        self.assertEqual(current_wflw["states"], {"created": "Created State", "submitted": "Submitted State", "done": "Done State"})
+
     def test_can_list_workflow_on_model(self):
         process = MyProcess.objects.create()
 
