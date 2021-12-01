@@ -22,15 +22,15 @@ class WorkflowModelMixin:
         return Response(serializer.data)
 
 
-class WorkflowDoesNotExits(Exception):
+class WorkflowDoesNotExist(Exception):
     pass
 
 
 class AdvanceWorkflowMixin(object):
     """
-    The aim of this mixin is to expose an endpoint that should help the frontend to advance a workflow (only from it's
-    initial state to the next), having it's PieuvreProcess.
-    This implementation only care about the first state.
+    The aim of this mixin is to expose an endpoint that should help the frontend to advance a workflow (only from its
+    initial state to the next), starting from its PieuvreProcess.
+    This implementation only cares about the first state.
     """
 
     @extend_schema(
@@ -55,7 +55,7 @@ class AdvanceWorkflowMixin(object):
             workflow = self._perform_advance_workflow(
                 serializer.validated_data.get("workflow"), obj
             )
-        except WorkflowDoesNotExits as e:
+        except WorkflowDoesNotExist as e:
             return HttpResponseBadRequest(e)
 
         workflow_serializer = WorkflowSerializer(instance=workflow)
@@ -80,12 +80,14 @@ class AdvanceWorkflowMixin(object):
 
         if not target_workflows or len(target_workflows) > 1:
             # not normal, there are many instances of the same (workflow, pieuvre_process)
-            raise Http404(_("Workflow not exist"))
+            raise Http404(_("Workflow does not exist"))
 
         target_workflow = target_workflows[0]
 
-        if target_workflow.state != target_workflow.states[0]:
-            raise WorkflowDoesNotExits(_("Workflow not exist"))
+        # Consistency check
+        # Usefulness TBD?
+        if target_workflow.state != target_workflow.get_initial_state():
+            raise WorkflowDoesNotExist(_("Workflow does not exist"))
 
         target_workflow.advance_workflow()
 

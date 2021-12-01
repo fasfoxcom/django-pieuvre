@@ -34,7 +34,9 @@ class PieuvreProcess(WorkflowEnabled, models.Model):
         return self.get_workflow_class().fancy_name
 
     def __str__(self):
-        return f"Process {self.workflow_name} {self.content_type.model}({self.object_id})"
+        return (
+            f"Process {self.workflow_name} {self.content_type.model}({self.object_id})"
+        )
 
     class Meta:
         unique_together = ("content_type", "object_id", "workflow_name")

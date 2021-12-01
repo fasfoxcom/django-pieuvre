@@ -1,16 +1,22 @@
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
+from extended_choices import Choices
 
 from djpieuvre.core import Workflow
 from djpieuvre import on_task_assign_group, on_task_assign_user
 from .models import MyProcess
 from django.utils.translation import gettext_lazy as _
+
 User = get_user_model()
 
 
 class MyFirstWorkflow1(Workflow):
     persist = True
-    states = ["created", "submitted", "done"]
+    states = Choices(
+        ("CREATED", "created", "Created State"),
+        ("SUBMITTED", "submitted", "Submitted State"),
+        ("DONE", "done", "Done State"),
+    )
     target_model = MyProcess
     fancy_name = _("My first workflow")
     transitions = [
@@ -157,7 +163,16 @@ class MyFirstWorkflow4(Workflow):
 
 class MyFirstWorkflow5(Workflow):
     persist = True
-    states = ["init", "edited", "submitted", "accepted", "withdrawn","published", "commented", "archived"]
+    states = [
+        "init",
+        "edited",
+        "submitted",
+        "accepted",
+        "withdrawn",
+        "published",
+        "commented",
+        "archived",
+    ]
     target_model = MyProcess
     transitions = [
         {
@@ -207,7 +222,8 @@ class MyFirstWorkflow5(Workflow):
             "manual": True,
             "label": "commented",
             "description": "commented",
-        },    {
+        },
+        {
             "name": "archive",
             "source": "commented",
             "destination": "archived",
@@ -216,4 +232,3 @@ class MyFirstWorkflow5(Workflow):
             "description": "archived",
         },
     ]
-

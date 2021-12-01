@@ -7,7 +7,11 @@ from django.db import IntegrityError
 from django.db.models import Q
 from django.conf import settings
 from pieuvre import Workflow as PieuvreWorkflow
-from pieuvre.exceptions import TransitionAmbiguous, TransitionUnavailable
+from pieuvre.exceptions import (
+    TransitionAmbiguous,
+    TransitionUnavailable,
+    CircularWorkflowError,
+)
 
 from djpieuvre.constants import (
     ON_TASK_ASSIGN_GROUP_HOOK,
@@ -72,12 +76,14 @@ class Workflow(PieuvreWorkflow):
                 self.process_target = model
 
                 states = getattr(self, "states", None)
-                if not initial_state and not states:
+
+                if not states:
                     # States must be defined because we need to instantiate the PieuvreProcess with an initial state
                     raise ValueError("States must be defined on the workflow")
-                elif not initial_state:
+
+                if not initial_state:
                     # Assume states are given in order
-                    initial_state = getattr(self, "initial_state", None) or states[0]
+                    initial_state = self.get_initial_state()
 
                 # Override model with the PieuvreProcess
                 # FIXME: we should not save the object here so that it is only saved if the workflow advances
@@ -105,24 +111,31 @@ class Workflow(PieuvreWorkflow):
 
         super().__init__(model)
 
-    def _advance_workflow(self):
+    def _advance_workflow(self, transition=None):
 
-        transition = self._get_next_transition()
+        transition = transition or self._get_next_transition()
 
         if transition.get("manual", False):
             # Manual transition: we must not advance the workflow, only create a task
-            # TODO: access rights
+            source_state = transition["source"]
+
+            if hasattr(self.states, "for_value"):
+                # If states are django extended choices, then use it
+                source_state_name = self.states.for_value(source_state).display
+            else:
+                source_state_name = source_state
+
             try:
                 # when get_or_create is executed in concurrent call, an integrity error would be raised to
                 # alert about an integrity violation
-                # a PieuvreTask has unicity constraint on (process, task)
+                # a PieuvreTask has uniqueness constraint on (process, task)
                 task, _ = PieuvreTask.objects.get_or_create(
-                    process=self.model, task=transition["source"]
+                    process=self.model,
+                    task=source_state,
+                    defaults={"name": source_state_name},
                 )
             except IntegrityError as e:
-                task = PieuvreProcess.objects.get(
-                    process=self.model, task=transition["source"]
-                )
+                task = PieuvreProcess.objects.get(process=self.model, task=source_state)
 
             # Check if the workflow gives us insights about whom to assign
             groups, users = [], []
@@ -146,6 +159,7 @@ class Workflow(PieuvreWorkflow):
 
             task.assign(transition, users=users, groups=groups)
         else:
+            # No need for run_transition because this comes from _get_next_transition()
             getattr(self, transition["name"])()
 
     def advance_workflow(self):
@@ -156,6 +170,7 @@ class Workflow(PieuvreWorkflow):
         """
 
         can_advance = True
+        seen_transitions = set()
 
         while can_advance:
             # if the current transition is manual, we can advance only once
@@ -165,9 +180,14 @@ class Workflow(PieuvreWorkflow):
                 can_advance = False
             else:
                 is_next_manual = next_transition.get("manual", False)
-
-                self._advance_workflow()
+                self._advance_workflow(next_transition)
                 can_advance = not is_next_manual
+
+                if can_advance and next_transition["name"] in seen_transitions:
+                    # Avoid infinite loop and abort
+                    raise CircularWorkflowError()
+
+                seen_transitions.add(next_transition["name"])
 
     def get_authorized_transitions(
         self,
@@ -243,7 +263,7 @@ class Workflow(PieuvreWorkflow):
 
     def _is_permission_defined(self, current_perm):
         return any(
-            [perm[0] == current_perm for perm in self.process_target._meta.permissions]
+            perm[0] == current_perm for perm in self.process_target._meta.permissions
         )
 
     def _get_next_transition(self):
@@ -262,7 +282,7 @@ class Workflow(PieuvreWorkflow):
         """
         Check whether all next transitions are manual
         """
-        return all([transition.get("manual", False) for transition in transitions])
+        return all(transition.get("manual", False) for transition in transitions)
 
 
 def register(cls: typing.Type[Workflow]):

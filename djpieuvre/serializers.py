@@ -59,7 +59,7 @@ class PieuvreTaskListSerializer(serializers.ModelSerializer):
             "state",
             "name",
             "task",
-            "created_at"
+            "created_at",
         ]
 
         fields = read_only_fields + []
