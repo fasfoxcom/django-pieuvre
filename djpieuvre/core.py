@@ -3,7 +3,7 @@ import typing
 from collections import defaultdict
 
 from django.contrib.contenttypes.models import ContentType
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.conf import settings
 from pieuvre import Workflow as PieuvreWorkflow
@@ -16,7 +16,7 @@ from pieuvre.exceptions import (
 from djpieuvre.constants import (
     ON_TASK_ASSIGN_GROUP_HOOK,
     ON_TASK_ASSIGN_USER_HOOK,
-    WORKFLOW_PERM_PREFIX,
+    WORKFLOW_PERM_PREFIX, TASK_STATES,
 )
 from djpieuvre.mixins import WorkflowEnabled
 from djpieuvre.models import PieuvreProcess, PieuvreTask
@@ -91,7 +91,7 @@ class Workflow(PieuvreWorkflow):
                 try:
                     # when get_or_create is executed in concurrent call, an integrity error would be raised to
                     # alert about an integrity violation
-                    # a PieuvreProcess has unicity constraint on (content_type, object_id, workflow_name)
+                    # a PieuvreProcess has an uniqueness constraint on (content_type, object_id, workflow_name)
                     model, _ = PieuvreProcess.objects.get_or_create(
                         content_type=ContentType.objects.get_for_model(model),
                         object_id=model.pk,
@@ -102,7 +102,6 @@ class Workflow(PieuvreWorkflow):
                         },
                     )
                 except IntegrityError as e:
-
                     model = PieuvreProcess.objects.get(
                         content_type=ContentType.objects.get_for_model(model),
                         object_id=model.pk,
@@ -125,17 +124,15 @@ class Workflow(PieuvreWorkflow):
             else:
                 source_state_name = source_state
 
-            try:
-                # when get_or_create is executed in concurrent call, an integrity error would be raised to
-                # alert about an integrity violation
-                # a PieuvreTask has uniqueness constraint on (process, task)
+            with transaction.atomic():
+                # We need a lock to avoid concurrency issues
+                obj = PieuvreProcess.objects.select_for_update().get(pk=self.model.pk)
                 task, _ = PieuvreTask.objects.get_or_create(
                     process=self.model,
                     task=source_state,
+                    state=TASK_STATES.CREATED,
                     defaults={"name": source_state_name},
                 )
-            except IntegrityError as e:
-                task = PieuvreProcess.objects.get(process=self.model, task=source_state)
 
             # Check if the workflow gives us insights about whom to assign
             groups, users = [], []

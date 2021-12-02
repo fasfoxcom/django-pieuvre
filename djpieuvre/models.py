@@ -76,5 +76,4 @@ class PieuvreTask(models.Model):
         return f"Task {self.name} {self.process.content_type.model} ({self.process.object_id})"
 
     class Meta:
-        unique_together = ("process", "task")
         ordering = ("created_at",)
