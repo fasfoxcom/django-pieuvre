@@ -3,6 +3,7 @@ from drf_spectacular.utils import extend_schema_field
 from extended_choices import Choices
 from rest_framework import serializers
 
+from djpieuvre.constants import TASK_STATES
 from djpieuvre.models import PieuvreTask, PieuvreProcess
 from djpieuvre.mixins import RequestInfoMixin
 from pieuvre.exceptions import (
@@ -99,6 +100,12 @@ class PieuvreTaskCompleteSerializer(serializers.Serializer):
         required=True,
         help_text="The name of the transition to execute",
     )
+
+    def validate_state(self, state):
+        if state == TASK_STATES.DONE:
+            raise serializers.ValidationError("Task already completed")
+
+        return state
 
     def save(self, **kwargs):
         transition = self.validated_data["transition"]

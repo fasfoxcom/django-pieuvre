@@ -2,7 +2,7 @@ from drf_spectacular.utils import extend_schema
 from django_filters import rest_framework as filters
 from drf_spectacular.utils import extend_schema
 
-from rest_framework import mixins, viewsets, permissions, serializers
+from rest_framework import mixins, viewsets, permissions, serializers, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
@@ -63,8 +63,7 @@ class TaskViewSet(
         task = self.get_object()
 
         deserializer = PieuvreTaskCompleteSerializer(instance=task, data=request.data)
-        if not deserializer.is_valid():
-            raise serializers.ValidationError(deserializer.errors)
+        deserializer.is_valid(raise_exception=True)
 
         deserializer.save()
         serializer = self.get_serializer(task)
