@@ -44,7 +44,9 @@ class PieuvreProcess(WorkflowEnabled, models.Model):
 
 
 class PieuvreTask(models.Model):
-    process = models.ForeignKey(PieuvreProcess, on_delete=models.CASCADE)
+    process = models.ForeignKey(
+        PieuvreProcess, on_delete=models.CASCADE, related_name="tasks"
+    )
     state = models.CharField(
         choices=TASK_STATES, default=TASK_STATES.CREATED, max_length=128
     )

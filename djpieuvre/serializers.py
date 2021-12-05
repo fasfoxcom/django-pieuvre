@@ -27,14 +27,13 @@ class WorkflowSerializer(serializers.Serializer):
         return workflow.get_authorized_transitions(user=self.context.get("user", None))
 
     def get_states(self, workflow):
-
         if not isinstance(workflow.states, Choices):
             return workflow.states
 
-        states = {}
-        for key in workflow.states.values.keys():
-            states[key] = workflow.states.for_value(key).display
-        return states
+        return {
+            key: workflow.states.for_value(key).display
+            for key in workflow.states.values.keys()
+        }
 
 
 class InstanceWorkflowSerializer(serializers.Serializer, RequestInfoMixin):

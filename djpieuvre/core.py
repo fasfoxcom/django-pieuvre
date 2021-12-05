@@ -16,7 +16,8 @@ from pieuvre.exceptions import (
 from djpieuvre.constants import (
     ON_TASK_ASSIGN_GROUP_HOOK,
     ON_TASK_ASSIGN_USER_HOOK,
-    WORKFLOW_PERM_PREFIX, TASK_STATES,
+    WORKFLOW_PERM_PREFIX,
+    TASK_STATES,
 )
 from djpieuvre.mixins import WorkflowEnabled
 from djpieuvre.models import PieuvreProcess, PieuvreTask
@@ -189,18 +190,16 @@ class Workflow(PieuvreWorkflow):
     def get_authorized_transitions(
         self,
         state: typing.Optional[str] = None,
-        return_all: bool = True,
         user: typing.Optional[settings.AUTH_USER_MODEL] = None,
     ):
-        return self._get_authorized_transitions(state, return_all, user)
+        return self._get_authorized_transitions(state, user)
 
     def _get_authorized_transitions(
         self,
         state: typing.Optional[str] = None,
-        return_all: bool = True,
         user: typing.Optional[settings.AUTH_USER_MODEL] = None,
     ):
-        available_transitions = self.get_available_transitions(state, return_all)
+        available_transitions = self.get_available_transitions(state, False)
 
         if not user:
             return available_transitions

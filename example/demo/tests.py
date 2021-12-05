@@ -175,7 +175,7 @@ class AuthenticatedTasksTests(TasksTests):
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         task = response.json()
-        self.assertEqual(len(task["workflows"]), 3)
+        self.assertEqual(len(task["workflows"]), 4)
         self.assertEqual(task["workflows"][0]["state"], "submitted")
         for wrkf in task["workflows"]:
             self.assertNotEqual(wrkf["name"], MyFirstWorkflow2.name)
@@ -190,7 +190,7 @@ class AuthenticatedTasksTests(TasksTests):
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         task = response.json()
-        self.assertEqual(len(task["workflows"]), 3)
+        self.assertEqual(len(task["workflows"]), 4)
 
         self.assertEqual(task["workflows"][0]["state"], "created")
         self.assertEqual(len(task["workflows"][0]["transitions"]), 1)
@@ -302,15 +302,15 @@ class AuthenticatedTasksTests(TasksTests):
         wf = self._advance_and_reload_workflow(
             MyFirstWorkflow3, process1, initial_state="progressing"
         )
-        self.assertTrue(wf.model.pieuvretask_set.exists())
-        task = wf.model.pieuvretask_set.first()
+        self.assertTrue(wf.model.tasks.exists())
+        task = wf.model.tasks.first()
         task.complete("complete")
         task.save()
         self.assertEqual(task.state, TASK_STATES.DONE)
 
         wf = self._advance_and_reload_workflow(MyFirstWorkflow3, process2)
         self.assertEqual(PieuvreTask.objects.count(), 2)
-        task = wf.model.pieuvretask_set.first()
+        task = wf.model.tasks.first()
         self.assertEqual(task.state, TASK_STATES.CREATED)
 
         response = self.client.get(reverse("pieuvretask-list"))
@@ -470,4 +470,4 @@ class WorkflowViewTest(APITestCase):
 
         workflows = r.json()["workflows"]
 
-        self.assertEqual(len(workflows), 3)
+        self.assertEqual(len(workflows), 4)
