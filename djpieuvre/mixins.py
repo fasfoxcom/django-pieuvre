@@ -23,6 +23,13 @@ class WorkflowEnabled(PieuvreWorkflowEnabled):
     def register_workflow(cls, workflow_class):
         cls._workflows.append(workflow_class)
 
+    def task_repr(self):
+        """
+        This method can be implemented to return an user friendly string attached to the tasks list.
+        Optionally, fields can be preloaded by filling the select_related attribute.
+        """
+        return None
+
 
 class RequestInfoMixin:
     """

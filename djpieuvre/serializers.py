@@ -58,6 +58,14 @@ class PieuvreTaskListSerializer(serializers.ModelSerializer):
     model_id = serializers.CharField(source="process.object_id")
     process_name = serializers.CharField(source="process.workflow_name")
     process_fancy_name = serializers.CharField(source="process.workflow_fancy_name")
+    instance_repr = serializers.SerializerMethodField()
+
+    @staticmethod
+    def get_instance_repr(task):
+        try:
+            return task.process.process_target.task_repr()
+        except AttributeError:
+            return None
 
     class Meta:
         model = PieuvreTask
@@ -68,6 +76,7 @@ class PieuvreTaskListSerializer(serializers.ModelSerializer):
             "process_fancy_name",
             "model",
             "model_id",
+            "instance_repr",
             "state",
             "name",
             "task",

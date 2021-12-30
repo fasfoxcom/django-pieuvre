@@ -96,7 +96,7 @@ class AuthenticatedTasksTests(TasksTests):
         self.client.force_authenticate(user=self.user)
 
     def test_user_can_get_tasks(self):
-        process = MyProcess.objects.create()
+        process = MyProcess.objects.create(my_property="unique-prop")
         wf = self._advance_and_reload_workflow(
             MyFirstWorkflow1, process, initial_state="submitted"
         )
@@ -109,6 +109,7 @@ class AuthenticatedTasksTests(TasksTests):
         self.assertEqual(task_json["process_name"], "MyFirstWorkflow1")
         self.assertEqual(task_json["process_fancy_name"], "My first workflow")
         self.assertEqual(task_json["name"], "Submitted State")
+        self.assertEqual(task_json["instance_repr"], "unique-prop")
 
         task = PieuvreTask.objects.first()
         # Now try to complete the task
@@ -459,7 +460,14 @@ class WorkflowViewTest(APITestCase):
         self.assertEqual(current_wflw["name"], "MyFirstWorkflow1")
         self.assertEqual(current_wflw["state"], "created")
         self.assertEqual(current_wflw["fancy_name"], "My first workflow")
-        self.assertEqual(current_wflw["states"], {"created": "Created State", "submitted": "Submitted State", "done": "Done State"})
+        self.assertEqual(
+            current_wflw["states"],
+            {
+                "created": "Created State",
+                "submitted": "Submitted State",
+                "done": "Done State",
+            },
+        )
 
     def test_can_list_workflow_on_model(self):
         process = MyProcess.objects.create()
