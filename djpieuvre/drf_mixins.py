@@ -44,19 +44,21 @@ class AdvanceWorkflowMixin(object):
         serializer_class=AdvanceWorkflowSerializer,
     )
     def advance_workflow(self, request, *args, **kwargs):
+        obj = self.get_object()
+
         serializer = AdvanceWorkflowSerializer(
             data=request.data, context=self.get_serializer_context()
         )
         serializer.is_valid(raise_exception=True)
 
-        obj = self.get_object()
-
         try:
-            workflow = self._perform_advance_workflow(
+            workflow = self._get_workflow(
                 serializer.validated_data.get("workflow"), obj
             )
         except WorkflowDoesNotExist as e:
             return HttpResponseBadRequest(e)
+        else:
+            workflow.advance_workflow()
 
         workflow_serializer = WorkflowSerializer(instance=workflow)
 
@@ -67,10 +69,8 @@ class AdvanceWorkflowMixin(object):
         )
 
     @staticmethod
-    def _perform_advance_workflow(
-        pieuvre_process: PieuvreProcess, obj: WorkflowEnabled
-    ):
-
+    def _get_workflow(pieuvre_process: PieuvreProcess, obj: WorkflowEnabled):
+        # FIXME: improve this logic
         target_workflows = list(
             filter(
                 lambda w: pieuvre_process.pk == w.model.pk,
@@ -88,7 +88,5 @@ class AdvanceWorkflowMixin(object):
         # Usefulness TBD?
         if target_workflow.state != target_workflow.get_initial_state():
             raise WorkflowDoesNotExist(_("Workflow does not exist"))
-
-        target_workflow.advance_workflow()
 
         return target_workflow
