@@ -311,13 +311,14 @@ class AuthenticatedTasksTests(TasksTests):
 
         wf = self._advance_and_reload_workflow(MyFirstWorkflow3, process2)
         self.assertEqual(PieuvreTask.objects.count(), 2)
-        task = wf.model.tasks.first()
+        task = wf.model.tasks.order_by("-created_at").first()
         self.assertEqual(task.state, TASK_STATES.CREATED)
 
         response = self.client.get(reverse("pieuvretask-list"))
 
         js = response.data
         self.assertEqual(len(js), 2)
+        self.assertEqual(js[0]["id"], task.pk)
         response = self.client.get(
             reverse("pieuvretask-list"), data={"status": TASK_STATES.DONE}
         )
