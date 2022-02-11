@@ -36,6 +36,14 @@ class WorkflowSerializer(serializers.Serializer):
         }
 
 
+class WorkflowStateSerializer(serializers.Serializer):
+    # we expose the model pk as the workflow pk
+    pk = serializers.CharField(source="model.pk")
+    fancy_name = serializers.CharField()
+    name = serializers.CharField()
+    state = serializers.CharField()
+
+
 class InstanceWorkflowSerializer(serializers.Serializer, RequestInfoMixin):
     """
     This is a model serializer but since the target model is not known, we make it a generic serializer.
@@ -43,12 +51,24 @@ class InstanceWorkflowSerializer(serializers.Serializer, RequestInfoMixin):
     """
 
     workflows = serializers.SerializerMethodField()
+    workflow_states = serializers.SerializerMethodField()
+
+    def _get_workflows(self, obj):
+        return [w for w in obj.workflow_instances if w.is_allowed(self.user)]
 
     @extend_schema_field(serializers.ListSerializer(child=WorkflowSerializer()))
     def get_workflows(self, obj):
-        workflows = [w for w in obj.workflow_instances if w.is_allowed(self.user)]
         return WorkflowSerializer(
-            workflows, many=True, read_only=True, context={"user": self.user}
+            self._get_workflows(obj),
+            many=True,
+            read_only=True,
+            context={"user": self.user},
+        ).data
+
+    @extend_schema_field(serializers.ListSerializer(child=WorkflowStateSerializer()))
+    def get_workflow_states(self, obj):
+        return WorkflowStateSerializer(
+            self._get_workflows(obj), many=True, read_only=True
         ).data
 
 

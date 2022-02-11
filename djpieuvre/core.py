@@ -75,6 +75,7 @@ class Workflow(PieuvreWorkflow):
                 self.process_target = model.process_target
             else:
                 self.process_target = model
+                model = None
 
                 states = getattr(self, "states", None)
 
@@ -89,25 +90,36 @@ class Workflow(PieuvreWorkflow):
                 # Override model with the PieuvreProcess
                 # FIXME: we should not save the object here so that it is only saved if the workflow advances
 
-                try:
-                    # when get_or_create is executed in concurrent call, an integrity error would be raised to
-                    # alert about an integrity violation
-                    # a PieuvreProcess has an uniqueness constraint on (content_type, object_id, workflow_name)
-                    model, _ = PieuvreProcess.objects.get_or_create(
-                        content_type=ContentType.objects.get_for_model(model),
-                        object_id=model.pk,
-                        workflow_name=self.__class__.name,
-                        defaults={
+                # First let's try to see if the process has been prefetched
+                if hasattr(self.process_target, "processes"):
+                    processes = [
+                        p
+                        for p in getattr(self.process_target, "processes")
+                        if p.workflow_name == self.__class__.name
+                    ]
+                    if processes:
+                        model = processes[0]
+
+                if model is None:
+                    kwargs = {
+                        "content_type": ContentType.objects.get_for_model(
+                            self.process_target
+                        ),
+                        "object_id": self.process_target.pk,
+                        "workflow_name": self.__class__.name,
+                    }
+
+                    try:
+                        # when get_or_create is executed in concurrent call, an integrity error would be raised to
+                        # alert about an integrity violation
+                        # a PieuvreProcess has an uniqueness constraint on (content_type, object_id, workflow_name)
+                        kwargs["defaults"] = {
                             PieuvreProcess.STATE_FIELD_NAME: initial_state,
                             "workflow_version": getattr(self, "version", 1),
-                        },
-                    )
-                except IntegrityError as e:
-                    model = PieuvreProcess.objects.get(
-                        content_type=ContentType.objects.get_for_model(model),
-                        object_id=model.pk,
-                        workflow_name=self.__class__.name,
-                    )
+                        }
+                        model, _ = PieuvreProcess.objects.get_or_create(**kwargs)
+                    except IntegrityError as e:
+                        model = PieuvreProcess.objects.get(**kwargs)
 
         super().__init__(model)
 
