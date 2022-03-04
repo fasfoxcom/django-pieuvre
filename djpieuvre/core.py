@@ -16,8 +16,9 @@ from pieuvre.exceptions import (
 from djpieuvre.constants import (
     ON_TASK_ASSIGN_GROUP_HOOK,
     ON_TASK_ASSIGN_USER_HOOK,
-    WORKFLOW_PERM_PREFIX,
     TASK_STATES,
+    WORKFLOW_PERM_SUFFIX_WRITE,
+    WORKFLOW_PERM_PREFIX,
 )
 from djpieuvre.mixins import WorkflowEnabled
 from djpieuvre.models import PieuvreProcess, PieuvreTask
@@ -250,7 +251,7 @@ class Workflow(PieuvreWorkflow):
         """
         return cls.__name__
 
-    def is_allowed(self, user):
+    def is_allowed(self, user, perm=WORKFLOW_PERM_SUFFIX_WRITE):
         """
         returns True if the user or it's group can access the workflow
         """
@@ -262,7 +263,7 @@ class Workflow(PieuvreWorkflow):
         ):
             return True
 
-        perm = "{}_{}".format(WORKFLOW_PERM_PREFIX, camel_to_snake(self.name))
+        perm = "{}_{}_{}".format(WORKFLOW_PERM_PREFIX, camel_to_snake(self.name), perm)
 
         if not self._is_permission_defined(perm):
             return True

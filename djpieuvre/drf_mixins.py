@@ -1,10 +1,11 @@
-from django.http import Http404, HttpResponseBadRequest
+from django.http import Http404, HttpResponseBadRequest, HttpResponseForbidden
 from django.utils.translation import gettext_lazy as _
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
+from djpieuvre import constants
 from djpieuvre.mixins import WorkflowEnabled
 from djpieuvre.models import PieuvreProcess
 from djpieuvre.serializers import InstanceWorkflowSerializer
@@ -57,8 +58,11 @@ class AdvanceWorkflowMixin(object):
             )
         except WorkflowDoesNotExist as e:
             return HttpResponseBadRequest(e)
-        else:
-            workflow.advance_workflow()
+
+        if not workflow.is_allowed(request.user, constants.WORKFLOW_PERM_SUFFIX_WRITE):
+            return HttpResponseForbidden()
+
+        workflow.advance_workflow()
 
         workflow_serializer = WorkflowSerializer(instance=workflow)
 

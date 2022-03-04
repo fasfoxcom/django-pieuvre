@@ -11,5 +11,5 @@ class MyProcess(WorkflowEnabled, models.Model):
 
     class Meta:
         permissions = [
-            ("access_my_first_workflow2", "comment"),
+            ("access_my_first_workflow2_write", "comment"),
         ]

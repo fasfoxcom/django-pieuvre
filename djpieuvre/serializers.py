@@ -3,6 +3,7 @@ from drf_spectacular.utils import extend_schema_field
 from extended_choices import Choices
 from rest_framework import serializers
 
+from djpieuvre import constants
 from djpieuvre.constants import TASK_STATES
 from djpieuvre.models import PieuvreTask, PieuvreProcess
 from djpieuvre.mixins import RequestInfoMixin
@@ -54,7 +55,12 @@ class InstanceWorkflowSerializer(serializers.Serializer, RequestInfoMixin):
     workflow_states = serializers.SerializerMethodField()
 
     def _get_workflows(self, obj):
-        return [w for w in obj.workflow_instances if w.is_allowed(self.user)]
+        # We only need the read permission to list the workflows
+        return [
+            w
+            for w in obj.workflow_instances
+            if w.is_allowed(self.user, perm=constants.WORKFLOW_PERM_SUFFIX_READ)
+        ]
 
     @extend_schema_field(serializers.ListSerializer(child=WorkflowSerializer()))
     def get_workflows(self, obj):
