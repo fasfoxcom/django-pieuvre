@@ -135,14 +135,11 @@ class PieuvreTaskCompleteSerializer(serializers.Serializer):
         help_text="The name of the transition to execute",
     )
 
-    def validate_state(self, state):
-        if state == TASK_STATES.DONE:
-            raise serializers.ValidationError("Task already completed")
-
-        return state
-
     def save(self, **kwargs):
         transition = self.validated_data["transition"]
+
+        if self.instance.state != TASK_STATES.CREATED:
+            raise serializers.ValidationError("Task was already processed")
 
         # we can't mark a task as done unless
         # the workflow state changes.

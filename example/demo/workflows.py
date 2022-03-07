@@ -16,6 +16,7 @@ class MyFirstWorkflow1(Workflow):
         ("CREATED", "created", "Created State"),
         ("SUBMITTED", "submitted", "Submitted State"),
         ("DONE", "done", "Done State"),
+        ("REPORTED", "reported", "Reporting Done State")
     )
     target_model = MyProcess
     fancy_name = _("My first workflow")
@@ -32,6 +33,12 @@ class MyFirstWorkflow1(Workflow):
             "destination": "done",
             "manual": True,
         },
+        {
+            "name": "report",
+            "source": "done",
+            "destination": "reported",
+            "manual": True,
+        }
     ]
 
     def default_user(self):

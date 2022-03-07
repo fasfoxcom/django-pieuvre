@@ -126,6 +126,19 @@ class AuthenticatedTasksTests(TasksTests):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         task.refresh_from_db()
         self.assertEqual(task.state, "done")
+        process.refresh_from_db()
+        self.assertEqual(process.workflow_instances[0].state, "done")
+
+        # Cannot execute transition twice
+        response = self.client.post(
+            reverse("pieuvretask-complete", kwargs={"pk": task.pk}),
+            data={"transition": "report"},
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        task = PieuvreTask.objects.get(task="done")
+        self.assertEqual(task.state, "created")
+        process.refresh_from_db()
+        self.assertEqual(process.workflow_instances[0].state, "done")
 
     def test_user_cant_get_tasks_assigned_to_someone_else(self):
         user = UserFactory()
@@ -467,6 +480,7 @@ class WorkflowViewTest(APITestCase):
                 "created": "Created State",
                 "submitted": "Submitted State",
                 "done": "Done State",
+                "reported": "Reporting Done State"
             },
         )
 
