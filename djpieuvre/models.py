@@ -13,7 +13,7 @@ class PieuvreProcess(WorkflowEnabled, models.Model):
     content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
     object_id = models.PositiveIntegerField()
     process_target = GenericForeignKey("content_type", "object_id")
-    workflow_name = models.TextField()
+    workflow_name = models.CharField(max_length=255)
     workflow_version = models.PositiveIntegerField(default=1)
     created_at = models.DateTimeField(auto_now_add=True)
     edited_at = models.DateTimeField(auto_now=True)
