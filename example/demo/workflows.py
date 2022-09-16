@@ -16,7 +16,7 @@ class MyFirstWorkflow1(Workflow):
         ("CREATED", "created", "Created State"),
         ("SUBMITTED", "submitted", "Submitted State"),
         ("DONE", "done", "Done State"),
-        ("REPORTED", "reported", "Reporting Done State")
+        ("REPORTED", "reported", "Reporting Done State"),
     )
     target_model = MyProcess
     fancy_name = _("My first workflow")
@@ -38,7 +38,7 @@ class MyFirstWorkflow1(Workflow):
             "source": "done",
             "destination": "reported",
             "manual": True,
-        }
+        },
     ]
 
     def default_user(self):
@@ -239,3 +239,31 @@ class MyFirstWorkflow5(Workflow):
             "description": "archived",
         },
     ]
+
+
+class MyFirstWorkflow6(Workflow):
+    persist = True
+    states = Choices(
+        ("CREATED", "created", "Created State"),
+        ("SUBMITTED", "submitted", "Submitted State"),
+        ("DONE", "done", "Done State"),
+    )
+    target_model = MyProcess
+    transitions = [
+        {
+            "name": "submit",
+            "source": "created",
+            "destination": "submitted",
+            "manual": False,
+        },
+        {
+            "name": "finish",
+            "source": "submitted",
+            "destination": "done",
+            "manual": True,
+        },
+    ]
+
+    @staticmethod
+    def applies_to(instance):
+        return instance.my_property == "workflow6-is-enabled"

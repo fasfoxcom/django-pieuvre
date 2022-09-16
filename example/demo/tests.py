@@ -194,6 +194,16 @@ class AuthenticatedTasksTests(TasksTests):
         for wrkf in task["workflows"]:
             self.assertNotEqual(wrkf["name"], MyFirstWorkflow2.name)
 
+    def test_user_can_only_get_authorized_and_enabled_workflows(self):
+        # By setting this property, the 6th workflow should now be available
+        process = MyProcess.objects.create(my_property="workflow6-is-enabled")
+        response = self.client.get(
+            reverse("myprocess-workflows", kwargs={"pk": process.pk})
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        task = response.json()
+        self.assertEqual(len(task["workflows"]), 5)
+
     def test_unauthorized_user_cannot_get_manual_transition(self):
         process = MyProcess.objects.create()
         wf = self._advance_and_reload_workflow(
@@ -480,7 +490,7 @@ class WorkflowViewTest(APITestCase):
                 "created": "Created State",
                 "submitted": "Submitted State",
                 "done": "Done State",
-                "reported": "Reporting Done State"
+                "reported": "Reporting Done State",
             },
         )
 

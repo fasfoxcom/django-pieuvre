@@ -13,7 +13,7 @@ class WorkflowEnabled(PieuvreWorkflowEnabled):
     @property
     def workflows(self):
         # returns only workflows that suite related to the current model.
-        return [w for w in self._workflows]
+        return [w for w in self._workflows if w.applies_to(self)]
 
     @property
     def workflow_instances(self):

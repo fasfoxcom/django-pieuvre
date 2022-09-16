@@ -19,7 +19,7 @@ Please check out the example (in the folder `example/`) for more insights. The t
 
 ### Prerequisites
 
-- Python 3.6+
+- Python 3.8+
 - Django 3.2+ (may work with previous versions)
 
 ### Installing

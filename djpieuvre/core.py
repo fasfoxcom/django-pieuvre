@@ -243,19 +243,21 @@ class Workflow(PieuvreWorkflow):
 
         return authorized_transitions
 
-    @classmethod
-    @property
-    def name(cls):
+    @staticmethod
+    def applies_to(instance):
         """
-        Return a name uniquely identifying this workflow
+        This method takes an instance as parameter and returns a boolean
+        if the workflow applies to this instance.
+        This allows filtering out some workflows depending on the instance.
         """
-        return cls.__name__
+        return True
 
     def is_allowed(self, user, perm=WORKFLOW_PERM_SUFFIX_WRITE):
         """
-        returns True if the user or it's group can access the workflow
+        Return True if the user or its group can access the workflow instance.
         """
-        # workflow without a target_model doesn't have sensitive data.
+        # Workflow without a target_model is allowed by default because it is not
+        # related to a given instance (which might require some permissions).
         if (
             not (app_name := get_app_name(self.target_model))
             or not user
@@ -263,14 +265,19 @@ class Workflow(PieuvreWorkflow):
         ):
             return True
 
-        perm = "{}_{}_{}".format(WORKFLOW_PERM_PREFIX, camel_to_snake(self.name), perm)
+        perm = f"{WORKFLOW_PERM_PREFIX}_{camel_to_snake(self.name)}_{perm}"
 
+        # Permissions are not mandatory: if it does not exist, assume the user
+        # is allowed to access the workflow.
         if not self._is_permission_defined(perm):
             return True
 
-        return user.has_perm(app_name + "." + perm)
+        return user.has_perm(f"{app_name}.{perm}")
 
     def _is_permission_defined(self, current_perm):
+        """
+        Return True if the permission exists.
+        """
         return any(
             perm[0] == current_perm for perm in self.process_target._meta.permissions
         )
@@ -293,10 +300,21 @@ class Workflow(PieuvreWorkflow):
         """
         return all(transition.get("manual", False) for transition in transitions)
 
+    @classmethod
+    @property
+    def name(cls):
+        """
+        Return a name uniquely identifying this workflow.
+        """
+        # Class name is imperfect (as you could define workflows named identically
+        # in separate folders), so be cautious.
+        return cls.__name__
+
 
 def register(cls: typing.Type[Workflow]):
     """
-    Register the workflow class, which is required to easily instantiate workflows from PieuvreProcess instances.
+    Register the workflow class, which is required to easily instantiate workflows
+    from PieuvreProcess instances.
     """
     name = cls.name
     version = getattr(cls, "version", 1)
@@ -318,6 +336,6 @@ def register(cls: typing.Type[Workflow]):
 
 def get(workflow_name: str, workflow_version: int):
     """
-    Given its name and version, return a registered workflow, or None if it does not exist.
+    Given its name and version, returns a registered workflow, or None if it does not exist.
     """
     return _workflows.get(workflow_name).get(workflow_version)
