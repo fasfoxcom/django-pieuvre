@@ -243,8 +243,8 @@ class Workflow(PieuvreWorkflow):
 
         return authorized_transitions
 
-    @staticmethod
-    def applies_to(instance):
+    @classmethod
+    def applies_to(cls, instance):
         """
         This method takes an instance as parameter and returns a boolean
         if the workflow applies to this instance.
