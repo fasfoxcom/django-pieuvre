@@ -1,7 +1,7 @@
 from django.http import Http404, HttpResponseBadRequest, HttpResponseForbidden
 from django.utils.translation import gettext_lazy as _
 from drf_spectacular.utils import extend_schema
-from rest_framework import status
+from rest_framework import status, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
@@ -94,3 +94,35 @@ class AdvanceWorkflowMixin(object):
             raise WorkflowDoesNotExist(_("Workflow does not exist"))
 
         return target_workflow
+
+
+class AdvanceWorkflowPermissions(permissions.DjangoModelPermissions):
+    """
+    This permission class is meant to be used with the AdvanceWorkflowMixin.
+    It will check that the user has at least one permission set in `workflow_perms`
+    otherwise it will return an HTTP_FORBIDDEN response.
+    It must be used with another permission class that will check that the user
+    has the rights for the given HTTP methods.
+    """
+
+    workflow_perms = []
+
+    def get_required_permissions(self, method, model_cls):
+        kwargs = {
+            "app_label": model_cls._meta.app_label,
+            "model_name": model_cls._meta.model_name,
+        }
+
+        return [perm % kwargs for perm in self.workflow_perms]
+
+    def has_permission(self, request, view):
+        if view.action != "advance_workflow" or request.method != "POST":
+            return False
+
+        user = request.user
+        queryset = self._queryset(view)
+        perms = self.get_required_permissions(request.method, queryset.model)
+        # The AdvanceWorkflowMixin will check that the user has the
+        # actual permission for the selected workflow, so we just make sure
+        # the user has a write access to at least one of them
+        return any(user.has_perm(perm) for perm in perms)

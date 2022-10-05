@@ -4,6 +4,10 @@
 
 ...
 
+## v0.6.3
+
+- New mixin to check workflow permissions
+
 ## v0.6.2
 
 - Make the permission name overridable so that inherited workflows can share the same permission
