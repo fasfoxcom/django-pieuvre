@@ -4,6 +4,10 @@
 
 ...
 
+## v0.6.2
+
+- Make the permission name overridable so that inherited workflows can share the same permission
+
 ## v0.6.1
 
 - Replace `applies_to` by a classmethod (instead of a static method) so that class name can be leveraged in the logic

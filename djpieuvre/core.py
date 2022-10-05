@@ -265,7 +265,7 @@ class Workflow(PieuvreWorkflow):
         ):
             return True
 
-        perm = f"{WORKFLOW_PERM_PREFIX}_{camel_to_snake(self.name)}_{perm}"
+        perm = f"{WORKFLOW_PERM_PREFIX}_{camel_to_snake(self.perm_name)}_{perm}"
 
         # Permissions are not mandatory: if it does not exist, assume the user
         # is allowed to access the workflow.
@@ -309,6 +309,16 @@ class Workflow(PieuvreWorkflow):
         # Class name is imperfect (as you could define workflows named identically
         # in separate folders), so be cautious.
         return cls.__name__
+
+    @classmethod
+    @property
+    def perm_name(cls):
+        """
+        Return a name identifying this workflow permissions. It does not need to be unique.
+        """
+        # Class name is imperfect (as you could define workflows named identically
+        # in separate folders), so be cautious.
+        return cls.name
 
 
 def register(cls: typing.Type[Workflow]):
