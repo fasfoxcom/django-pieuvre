@@ -6,6 +6,8 @@ from django.db import models
 from djpieuvre.constants import TASK_STATES
 from djpieuvre.mixins import WorkflowEnabled
 
+from pieuvre.exceptions import TransitionDoesNotExist
+
 
 class PieuvreProcess(WorkflowEnabled, models.Model):
     STATE_FIELD_NAME = "state"
@@ -69,10 +71,19 @@ class PieuvreTask(models.Model):
         if groups:
             self.groups.set(groups)
 
-    def complete(self, transition):
+    def complete(self, transition_name):
+        # Make sure the transition is allowed
+        transition = self.process.workflow.get_available_transition(transition_name)
+
+        if not transition:
+            raise TransitionDoesNotExist(transition=transition_name)
+
         self.state = TASK_STATES.DONE
-        self.process.workflow.run_transition(transition, self)
-        self.process.workflow.advance_workflow()
+        self.process.workflow.run_transition(transition_name, self)
+
+        # This lets us prevent the automatic transition from happening, useful in certain cases
+        if transition.get("auto_advance", True):
+            self.process.workflow.advance_workflow()
 
     def __str__(self):
         return f"Task {self.name} {self.process.content_type.model} ({self.process.object_id})"
