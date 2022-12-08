@@ -5,8 +5,9 @@ from rest_framework import serializers
 
 from djpieuvre import constants
 from djpieuvre.constants import TASK_STATES
+from djpieuvre.exceptions import WorkflowDoesNotExist
 from djpieuvre.models import PieuvreTask, PieuvreProcess
-from djpieuvre.mixins import RequestInfoMixin
+from djpieuvre.mixins import RequestInfoMixin, WorkflowEnabled
 from pieuvre.exceptions import (
     TransitionDoesNotExist,
     InvalidTransition,
@@ -163,3 +164,51 @@ class AdvanceWorkflowSerializer(serializers.Serializer):
     workflow = serializers.PrimaryKeyRelatedField(
         queryset=PieuvreProcess.objects.all(), required=True
     )
+    transition = serializers.CharField(
+        write_only=True,
+        required=False,
+        help_text="Optional: the name of the transition to execute",
+    )
+
+    @staticmethod
+    def _get_workflow(pieuvre_process: PieuvreProcess, obj: WorkflowEnabled):
+        # FIXME: improve this logic
+        target_workflows = list(
+            filter(
+                lambda w: pieuvre_process.pk == w.model.pk,
+                obj.workflow_instances,
+            )
+        )
+
+        if not target_workflows or len(target_workflows) > 1:
+            # not normal, there are many instances of the same (workflow, pieuvre_process)
+            raise WorkflowDoesNotExist("Workflow does not exist")
+
+        return target_workflows[0]
+
+    def validate(self, data):
+        data = super().validate(data)
+        try:
+            data["workflow"] = self._get_workflow(data["workflow"], self.context["obj"])
+        except WorkflowDoesNotExist:
+            raise serializers.ValidationError({"workflow": "Workflow does not exist"})
+
+        transition_name = data.get("transition")
+        # Make sure the transition exists and can be executed by the current user
+        transition = next(
+            (
+                t
+                for t in data["workflow"].get_authorized_transitions(
+                    user=self.context.get("user")
+                )
+                if t["name"] == transition_name
+            ),
+            None,
+        )
+        if transition_name and (not transition or transition.get("create_task", True)):
+            # If create_task is True, the transition must be activated by completing the task, not by the
+            # advance workflow endpoint.
+            raise serializers.ValidationError(
+                {"transition": "Transition is not available"}
+            )
+        return data

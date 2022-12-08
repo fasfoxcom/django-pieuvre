@@ -20,6 +20,7 @@ from djpieuvre.constants import (
     WORKFLOW_PERM_SUFFIX_WRITE,
     WORKFLOW_PERM_PREFIX,
 )
+from djpieuvre.exceptions import WorkflowDoesNotExist
 from djpieuvre.mixins import WorkflowEnabled
 from djpieuvre.models import PieuvreProcess, PieuvreTask
 from djpieuvre.utils import get_app_name, camel_to_snake
@@ -127,8 +128,13 @@ class Workflow(PieuvreWorkflow):
     def _advance_workflow(self, transition=None):
 
         transition = transition or self._get_next_transition()
+        # If `auto_advance` is True it means that the transition, despite being manual, should not create a task
+        # and can be auto advanced. This is useful for transitions that must not be triggered automatically
+        # but should not be automatically assigned to users
+        manual_transition = transition.get("manual", False)
+        create_task = transition.get("create_task", True)
 
-        if transition.get("manual", False):
+        if manual_transition and create_task:
             # Manual transition: we must not advance the workflow, only create a task
             source_state = transition["source"]
 
@@ -169,9 +175,10 @@ class Workflow(PieuvreWorkflow):
                     users = assign_user()
 
             task.assign(transition, users=users, groups=groups)
-        else:
+        elif not manual_transition:
             # No need for run_transition because this comes from _get_next_transition()
             getattr(self, transition["name"])()
+        # Else, the transition is manual but does not create a task, so we do nothing
 
     def advance_workflow(self):
         """

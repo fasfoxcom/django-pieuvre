@@ -92,6 +92,13 @@ class MyFirstWorkflow3(Workflow):
             "destination": "completed",
             "manual": True,
         },
+        {
+            "name": "reinitialize",
+            "source": "completed",
+            "destination": "init",
+            "manual": True,
+            "create_task": False,
+        },
     ]
 
     @on_task_assign_group("complete")

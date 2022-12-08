@@ -417,18 +417,22 @@ class AdvanceWorkflowTest(APITestCase):
         wflw.model.refresh_from_db()
         self.assertEqual(wflw.state, "submitted")
 
-    def test_try_to_start_workflow_on_already_running_workflow(self):
+    def test_advance_workflow_on_already_running_workflow(self):
         process = MyProcess.objects.create()
         wflw = MyFirstWorkflow4(model=process, initial_state="edited")
         self.assertEqual(wflw.state, "edited")
+        self.assertEqual(PieuvreTask.objects.all().count(), 0)
         r = self.client.post(
             reverse("myprocess-advance-workflow", args=[process.pk]),
             data={"workflow": wflw.model.pk},
         )
 
-        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.status_code, 200)
         wflw.model.refresh_from_db()
+        # Workflow has not advanced because the task is manual
         self.assertEqual(wflw.state, "edited")
+        # Task has been created by the advance call
+        self.assertEqual(PieuvreTask.objects.all().count(), 1)
 
     def test_auto_advance_workflow(self):
         process = MyProcess.objects.create()
@@ -442,7 +446,6 @@ class AdvanceWorkflowTest(APITestCase):
         self.assertEqual(workflow.state, "submitted")
 
         task = PieuvreTask.objects.all()[0]
-
         task.complete("accept")
         workflow.model.refresh_from_db()
         self.assertEqual(workflow.state, "published")
@@ -504,3 +507,46 @@ class WorkflowViewTest(APITestCase):
         workflows = r.json()["workflows"]
 
         self.assertEqual(len(workflows), 4)
+
+    def test_auto_advance_workflow_with_non_manual_task(self):
+        process = MyProcess.objects.create()
+        workflow = MyFirstWorkflow3(model=process, initial_state="progressing")
+
+        r = self.client.post(
+            reverse("myprocess-advance-workflow", args=[process.pk]),
+            data={"workflow": workflow.model.pk},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+
+        # Task is manual: it must not advance
+        workflow.model.refresh_from_db()
+        self.assertEqual(workflow.state, "progressing")
+
+        # But the task is here
+        task = PieuvreTask.objects.all()[0]
+        task.complete("complete")
+
+        workflow.model.refresh_from_db()
+        self.assertEqual(workflow.state, "completed")
+
+        # We cannot advance again without providing the transition
+        r = self.client.post(
+            reverse("myprocess-advance-workflow", args=[process.pk]),
+            data={"workflow": workflow.model.pk},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        workflow.model.refresh_from_db()
+        self.assertEqual(workflow.state, "completed")
+
+        # If we explicitely provide the transition, we can advance the workflow
+        # even without a task, because this transition has a create_task=False flag
+        r = self.client.post(
+            reverse("myprocess-advance-workflow", args=[process.pk]),
+            data={"workflow": workflow.model.pk, "transition": "reinitialize"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        workflow.model.refresh_from_db()
+        self.assertEqual(workflow.state, "init")

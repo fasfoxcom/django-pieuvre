@@ -47,22 +47,21 @@ class AdvanceWorkflowMixin(object):
     def advance_workflow(self, request, *args, **kwargs):
         obj = self.get_object()
 
-        serializer = AdvanceWorkflowSerializer(
-            data=request.data, context=self.get_serializer_context()
-        )
+        context = self.get_serializer_context()
+        context["request"] = request
+        context["obj"] = obj
+
+        serializer = AdvanceWorkflowSerializer(data=request.data, context=context)
         serializer.is_valid(raise_exception=True)
 
-        try:
-            workflow = self._get_workflow(
-                serializer.validated_data.get("workflow"), obj
-            )
-        except WorkflowDoesNotExist as e:
-            return HttpResponseBadRequest(e)
-
+        workflow = serializer.validated_data["workflow"]
         if not workflow.is_allowed(request.user, constants.WORKFLOW_PERM_SUFFIX_WRITE):
             return HttpResponseForbidden()
 
-        workflow.advance_workflow()
+        if transition := serializer.validated_data.get("transition"):
+            getattr(workflow, transition)()
+        else:
+            workflow.advance_workflow()
 
         workflow_serializer = WorkflowSerializer(instance=workflow)
 
@@ -71,29 +70,6 @@ class AdvanceWorkflowMixin(object):
             content_type="application/json",
             data=workflow_serializer.data,
         )
-
-    @staticmethod
-    def _get_workflow(pieuvre_process: PieuvreProcess, obj: WorkflowEnabled):
-        # FIXME: improve this logic
-        target_workflows = list(
-            filter(
-                lambda w: pieuvre_process.pk == w.model.pk,
-                obj.workflow_instances,
-            )
-        )
-
-        if not target_workflows or len(target_workflows) > 1:
-            # not normal, there are many instances of the same (workflow, pieuvre_process)
-            raise Http404(_("Workflow does not exist"))
-
-        target_workflow = target_workflows[0]
-
-        # Consistency check
-        # Usefulness TBD?
-        if target_workflow.state != target_workflow.get_initial_state():
-            raise WorkflowDoesNotExist(_("Workflow does not exist"))
-
-        return target_workflow
 
 
 class AdvanceWorkflowPermissions(permissions.DjangoModelPermissions):
