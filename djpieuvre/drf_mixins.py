@@ -13,13 +13,18 @@ from djpieuvre.serializers import WorkflowSerializer, AdvanceWorkflowSerializer
 
 
 class WorkflowModelMixin:
+    def get_workflows_serializer_class(self):
+        return InstanceWorkflowSerializer
+
     @action(detail=True, methods=["get"])
     def workflows(self, request, pk=None):
         """
         Return workflows applicable to current object
         """
         instance = self.get_object()
-        serializer = InstanceWorkflowSerializer(instance, context={"request": request})
+        serializer = self.get_workflows_serializer_class()(
+            instance, context={"request": request}
+        )
         return Response(serializer.data)
 
 

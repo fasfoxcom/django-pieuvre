@@ -4,6 +4,10 @@
 
 ...
 
+## v0.7.2
+
+- Make the serializers configurable
+
 ## v0.6.3
 
 - New mixin to check workflow permissions

@@ -55,6 +55,12 @@ class InstanceWorkflowSerializer(serializers.Serializer, RequestInfoMixin):
     workflows = serializers.SerializerMethodField()
     workflow_states = serializers.SerializerMethodField()
 
+    def get_workflow_serializer_class(self):
+        return WorkflowSerializer
+
+    def get_workflow_states_serializer_class(self):
+        return WorkflowStateSerializer
+
     def _get_workflows(self, obj):
         # We only need the read permission to list the workflows
         return [
@@ -65,7 +71,7 @@ class InstanceWorkflowSerializer(serializers.Serializer, RequestInfoMixin):
 
     @extend_schema_field(serializers.ListSerializer(child=WorkflowSerializer()))
     def get_workflows(self, obj):
-        return WorkflowSerializer(
+        return self.get_workflow_serializer_class()(
             self._get_workflows(obj),
             many=True,
             read_only=True,
@@ -74,7 +80,7 @@ class InstanceWorkflowSerializer(serializers.Serializer, RequestInfoMixin):
 
     @extend_schema_field(serializers.ListSerializer(child=WorkflowStateSerializer()))
     def get_workflow_states(self, obj):
-        return WorkflowStateSerializer(
+        return self.get_workflow_states_serializer_class()(
             self._get_workflows(obj), many=True, read_only=True
         ).data
 
